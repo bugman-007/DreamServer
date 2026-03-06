@@ -67,16 +67,11 @@ To skip bootstrap and wait for the full model: `./install.sh --no-bootstrap`
 
 ### macOS and Windows (coming soon)
 
-> **These platforms are not yet functional.** The installers below run preflight diagnostics only — they will check your system readiness but will not produce a running AI stack. Full runtime support is in active development (macOS: target mid-March 2026, Windows: target end of March 2026).
+> **macOS is not yet functional.** The macOS installer runs preflight diagnostics only — it will check your system readiness but will not produce a running AI stack. Full macOS runtime support is in active development (target: mid-March 2026).
 
 **macOS (Apple Silicon):**
 ```bash
 ./install.sh    # Runs preflight checks and diagnostics only
-```
-
-**Windows (PowerShell):**
-```powershell
-.\installers\windows.ps1    # Runs WSL2/Docker/GPU preflight checks only
 ```
 
 See [`docs/SUPPORT-MATRIX.md`](docs/SUPPORT-MATRIX.md) for current support levels.
