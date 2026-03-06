@@ -42,6 +42,12 @@
 | [DREAM-DOCTOR.md](DREAM-DOCTOR.md) | Operators | Diagnostic tool usage |
 | [PREFLIGHT-ENGINE.md](PREFLIGHT-ENGINE.md) | Developers | Preflight validation system |
 
+## macOS
+
+| Doc | Audience | Description |
+|-----|----------|-------------|
+| [MACOS-QUICKSTART.md](MACOS-QUICKSTART.md) | Operators | macOS Apple Silicon install guide |
+
 ## Windows
 
 | Doc | Audience | Description |

@@ -26,14 +26,14 @@
 > |----------|--------|
 > | **Linux** (NVIDIA + AMD) | **Supported** — install and run today |
 > | **Windows** (NVIDIA + AMD) | **Supported** — install and run today |
-> | **macOS** (Apple Silicon) | **Coming soon** — target mid-March 2026 |
+> | **macOS** (Apple Silicon) | **Supported** — install and run today |
 >
 > **Tested Linux distros:** Ubuntu 24.04/22.04, Debian 12, Fedora 41+, Arch Linux, CachyOS, openSUSE Tumbleweed. Other distros using apt, dnf, pacman, or zypper should also work — [open an issue](https://github.com/Light-Heart-Labs/DreamServer/issues) if yours doesn't.
 >
 > **Windows:** Requires Docker Desktop with WSL2 backend. NVIDIA GPUs use Docker GPU passthrough; AMD Strix Halo runs llama-server natively with Vulkan.
 >
-> The macOS installer currently provides system diagnostics and preflight checks only.
-> Full macOS runtime support is in active development.
+> **macOS:** Requires Apple Silicon (M1+) and Docker Desktop. llama-server runs natively with Metal GPU acceleration; all other services run in Docker.
+>
 > See the [Support Matrix](dream-server/docs/SUPPORT-MATRIX.md) for details.
 
 ---
@@ -98,15 +98,19 @@ The installer detects your GPU, picks the right model, generates credentials, st
 </details>
 
 <details>
-<summary><b>macOS (coming soon — not yet functional)</b></summary>
+<summary><b>macOS (Apple Silicon)</b></summary>
 
-The macOS installer currently runs **preflight diagnostics only** — it will check your system but will not produce a working AI stack yet. Full runtime support for Apple Silicon is in active development (target mid-March 2026).
+Requires Apple Silicon (M1+) and Docker Desktop.
 
 ```bash
 git clone https://github.com/Light-Heart-Labs/DreamServer.git
 cd DreamServer/dream-server
-./install.sh    # Runs preflight checks; full runtime coming soon
+./install.sh
 ```
+
+The installer detects your chip, picks the right model for your unified memory, launches llama-server natively with Metal acceleration, and starts all other services in Docker. Manage with `./dream-macos.sh status`.
+
+See the [macOS Quickstart](dream-server/docs/MACOS-QUICKSTART.md) for details.
 
 </details>
 
@@ -161,6 +165,15 @@ The installer detects your GPU and picks the optimal model automatically. No man
 |-------------|-------|----------|
 | 64–89 GB | Qwen3 30B-A3B (30B MoE) | Ryzen AI MAX+ 395 (64GB) |
 | 90+ GB | Qwen3 Coder Next (80B MoE) | Ryzen AI MAX+ 395 (96GB) |
+
+### Apple Silicon (Unified Memory, Metal)
+
+| Unified RAM | Model | Example Hardware |
+|-------------|-------|-----------------|
+| 8 GB | Qwen3 4B (Q4_K_M) | M1/M2 base (8GB) |
+| 16 GB | Qwen3 8B (Q4_K_M) | M4 Mac Mini, M3 MacBook Air |
+| 32–48 GB | Qwen3 14B (Q4_K_M) | M4 Pro Mac Mini, M2 Max MacBook Pro |
+| 64+ GB | Qwen3 30B-A3B (30B MoE) | M2 Ultra Mac Studio, M4 Max MacBook Pro |
 
 Override tier selection: `./install.sh --tier 3`
 

@@ -10,14 +10,14 @@ Last updated: 2026-03-05
 | Linux AMD unified (Strix) | Preferred AMD path | Tier A | — | Real install + runtime benchmarks + doctor/preflight clean |
 | Linux NVIDIA | CUDA/llama-server path | Tier B | — | Real install + model load + runtime/throughput checks |
 | Windows (Docker Desktop + WSL2) | Standalone installer with full runtime | Tier B | — | `.\install.ps1` real run + GPU detection + Docker compose up + health checks pass |
-| macOS Apple Silicon | Preflight diagnostics only (no runtime) | Tier C | Mid-March 2026 | `installers/macos.sh` run + preflight/doctor pass + full runtime parity |
+| macOS Apple Silicon | Native Metal inference + Docker services | Tier B | — | `./install.sh` real run + chip detection + llama-server Metal healthy + 16/17 services online + health checks pass |
 
 ## Release language guardrails
 
 - Safe to claim now:
   - Linux support (AMD Strix Halo + NVIDIA).
   - Windows support (Docker Desktop + WSL2, NVIDIA/AMD GPU auto-detection).
-  - macOS **coming soon** with preflight diagnostics available now.
+  - macOS support (Apple Silicon with Metal acceleration).
 - Not safe to claim now:
-  - macOS **support** (implies a working runtime, which does not exist yet).
-  - Full macOS runtime parity with Linux.
+  - Full macOS runtime parity with Linux (ComfyUI not available on macOS — no GPU backend for image generation).
+  - macOS Tier A (needs broader hardware validation across M1/M2/M3/M4 variants).
