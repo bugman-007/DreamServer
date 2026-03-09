@@ -4,7 +4,9 @@
 
 EXTENSIONS_DIR="${SCRIPT_DIR:-$(pwd)}/extensions/services"
 _SR_LOADED=false
-_SR_CACHE="/tmp/dream-service-registry.$$.sh"
+_SR_CACHE_DIR="${SCRIPT_DIR:-$(pwd)}/.cache"
+_SR_CACHE="$_SR_CACHE_DIR/service-registry.sh"
+_SR_MTIME_CACHE="$_SR_CACHE_DIR/service-registry.mtimes"
 
 # Associative arrays (bash 4+)
 declare -A SERVICE_ALIASES      # alias → service_id
@@ -19,12 +21,34 @@ declare -A SERVICE_NAMES        # service_id → display name
 declare -A SERVICE_SETUP_HOOKS  # service_id → absolute path to setup script
 declare -a SERVICE_IDS          # ordered list of all service IDs
 
-sr_load() {
-    [[ "$_SR_LOADED" == "true" ]] && return 0
-    SERVICE_IDS=()
+# Check if cache is valid by comparing manifest mtimes
+_sr_cache_valid() {
+    [[ -f "$_SR_CACHE" && -f "$_SR_MTIME_CACHE" ]] || return 1
 
-    # Single Python pass: reads ALL manifests, emits sourceable bash
-    python3 - "$EXTENSIONS_DIR" <<'PYEOF' > "$_SR_CACHE"
+    # Check if extensions directory exists
+    [[ -d "$EXTENSIONS_DIR" ]] || return 1
+
+    # Build current mtime snapshot
+    local current_mtimes=""
+    while IFS= read -r -d '' manifest; do
+        local mtime
+        mtime=$(stat -c %Y "$manifest" 2>/dev/null || stat -f %m "$manifest" 2>/dev/null || echo "0")
+        current_mtimes="${current_mtimes}${manifest}:${mtime}"$'\n'
+    done < <(find "$EXTENSIONS_DIR" -maxdepth 2 -name "manifest.y*ml" -o -name "manifest.json" 2>/dev/null | sort -z)
+
+    # Compare with cached mtimes
+    local cached_mtimes
+    cached_mtimes=$(cat "$_SR_MTIME_CACHE" 2>/dev/null || echo "")
+
+    [[ "$current_mtimes" == "$cached_mtimes" ]]
+}
+
+# Generate cache from manifests
+_sr_generate_cache() {
+    mkdir -p "$_SR_CACHE_DIR"
+
+    # Generate registry cache
+    python3 - "$EXTENSIONS_DIR" <<'PYEOF' > "$_SR_CACHE.tmp"
 import yaml, sys, os
 from pathlib import Path
 
@@ -92,9 +116,32 @@ for service_dir in sorted(ext_dir.iterdir()):
         continue
 PYEOF
 
-    # Source the generated registry (one subprocess for all manifests)
-    [[ -f "$_SR_CACHE" ]] && . "$_SR_CACHE"
-    rm -f "$_SR_CACHE"
+    # Move to final location atomically
+    [[ -f "$_SR_CACHE.tmp" ]] && mv "$_SR_CACHE.tmp" "$_SR_CACHE"
+
+    # Generate mtime cache
+    : > "$_SR_MTIME_CACHE.tmp"
+    while IFS= read -r -d '' manifest; do
+        local mtime
+        mtime=$(stat -c %Y "$manifest" 2>/dev/null || stat -f %m "$manifest" 2>/dev/null || echo "0")
+        echo "${manifest}:${mtime}" >> "$_SR_MTIME_CACHE.tmp"
+    done < <(find "$EXTENSIONS_DIR" -maxdepth 2 -name "manifest.y*ml" -o -name "manifest.json" 2>/dev/null | sort -z)
+
+    [[ -f "$_SR_MTIME_CACHE.tmp" ]] && mv "$_SR_MTIME_CACHE.tmp" "$_SR_MTIME_CACHE"
+}
+
+sr_load() {
+    [[ "$_SR_LOADED" == "true" ]] && return 0
+    SERVICE_IDS=()
+
+    # Use cache if valid, otherwise regenerate
+    if _sr_cache_valid; then
+        . "$_SR_CACHE"
+    else
+        _sr_generate_cache
+        [[ -f "$_SR_CACHE" ]] && . "$_SR_CACHE"
+    fi
+
     _SR_LOADED=true
 }
 
