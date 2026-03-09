@@ -185,7 +185,7 @@ The inference engine is still loading.
 Edit `.env` to change ports:
 ```
 WEBUI_PORT=3001
-LLAMA_SERVER_PORT=8081    # LLM inference port
+OLLAMA_PORT=8081          # LLM inference port
 ```
 
 ---
