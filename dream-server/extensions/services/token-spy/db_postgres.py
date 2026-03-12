@@ -66,17 +66,17 @@ def _put_conn(conn):
 def init_db():
     """Initialize database (ensure tenant exists for single-tenant mode)."""
     global _tenant_id
-    
+
     conn = _get_conn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Check if tenant exists
             cur.execute(
                 "SELECT id FROM tenants WHERE slug = %s AND deleted_at IS NULL",
-                (SINGLE_TENANT_SLUG,)
+                (SINGLE_TENANT_SLUG,),
             )
             row = cur.fetchone()
-            
+
             if row:
                 _tenant_id = row["id"]
                 logger.info(f"Using existing tenant: {SINGLE_TENANT_SLUG} ({_tenant_id})")
@@ -88,11 +88,11 @@ def init_db():
                     VALUES (%s, %s, 'free')
                     RETURNING id
                     """,
-                    (SINGLE_TENANT_SLUG.replace("-", " ").title(), SINGLE_TENANT_SLUG)
+                    (SINGLE_TENANT_SLUG.replace("-", " ").title(), SINGLE_TENANT_SLUG),
                 )
                 _tenant_id = cur.fetchone()["id"]
                 logger.info(f"Created tenant: {SINGLE_TENANT_SLUG} ({_tenant_id})")
-            
+
             conn.commit()
     finally:
         _put_conn(conn)
@@ -101,23 +101,22 @@ def init_db():
 def _get_or_create_agent(agent_name: str) -> UUID:
     """Get or create an agent by name (within the current tenant)."""
     global _agent_cache
-    
+
     if agent_name in _agent_cache:
         return _agent_cache[agent_name]
-    
+
     conn = _get_conn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Bypass RLS for this query
             cur.execute("SET LOCAL app.current_tenant = %s", (str(_tenant_id),))
-            
+
             slug = agent_name.lower().replace(" ", "-")
             cur.execute(
-                "SELECT id FROM agents WHERE tenant_id = %s AND slug = %s",
-                (_tenant_id, slug)
+                "SELECT id FROM agents WHERE tenant_id = %s AND slug = %s", (_tenant_id, slug)
             )
             row = cur.fetchone()
-            
+
             if row:
                 agent_id = row["id"]
             else:
@@ -127,11 +126,11 @@ def _get_or_create_agent(agent_name: str) -> UUID:
                     VALUES (%s, %s, %s)
                     RETURNING id
                     """,
-                    (_tenant_id, agent_name, slug)
+                    (_tenant_id, agent_name, slug),
                 )
                 agent_id = cur.fetchone()["id"]
                 logger.info(f"Created agent: {agent_name} ({agent_id})")
-            
+
             conn.commit()
             _agent_cache[agent_name] = agent_id
             return agent_id
@@ -146,16 +145,16 @@ def log_usage(entry: dict):
     """Log a single request's usage metrics."""
     if _tenant_id is None:
         init_db()
-    
+
     agent_name = entry.get("agent", "unknown")
     agent_id = _get_or_create_agent(agent_name)
-    
+
     # Map SQLite entry format to PostgreSQL schema
     conn = _get_conn()
     try:
         with conn.cursor() as cur:
             cur.execute("SET LOCAL app.current_tenant = %s", (str(_tenant_id),))
-            
+
             cur.execute(
                 """
                 INSERT INTO requests (
@@ -178,7 +177,9 @@ def log_usage(entry: dict):
                 )
                 """,
                 (
-                    uuid4(), _tenant_id, agent_id,
+                    uuid4(),
+                    _tenant_id,
+                    agent_id,
                     _detect_provider(entry.get("model", "")),
                     entry.get("model", "unknown"),
                     entry.get("request_body_bytes", 0),
@@ -205,7 +206,7 @@ def log_usage(entry: dict):
                     entry.get("estimated_cost_usd", 0),
                     entry.get("duration_ms", 0),
                     entry.get("stop_reason"),
-                )
+                ),
             )
             conn.commit()
     except Exception:
@@ -235,12 +236,12 @@ def query_usage(agent: str | None = None, hours: int = 24, limit: int = 200) -> 
     """Query recent usage records."""
     if _tenant_id is None:
         init_db()
-    
+
     conn = _get_conn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SET LOCAL app.current_tenant = %s", (str(_tenant_id),))
-            
+
             sql = """
                 SELECT 
                     r.id, r.timestamp, a.name as agent, r.model,
@@ -260,17 +261,17 @@ def query_usage(agent: str | None = None, hours: int = 24, limit: int = 200) -> 
                 AND r.timestamp > NOW() - INTERVAL '%s hours'
             """
             params = [_tenant_id, hours]
-            
+
             if agent:
                 sql += " AND a.name = %s"
                 params.append(agent)
-            
+
             sql += " ORDER BY r.timestamp DESC LIMIT %s"
             params.append(limit)
-            
+
             cur.execute(sql, params)
             rows = cur.fetchall()
-            
+
             # Convert timestamps to ISO format strings for compatibility
             result = []
             for row in rows:
@@ -289,12 +290,12 @@ def query_summary(hours: int = 24) -> list[dict]:
     """Get summary metrics grouped by agent."""
     if _tenant_id is None:
         init_db()
-    
+
     conn = _get_conn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SET LOCAL app.current_tenant = %s", (str(_tenant_id),))
-            
+
             cur.execute(
                 """
                 SELECT
@@ -317,10 +318,10 @@ def query_summary(hours: int = 24) -> list[dict]:
                 AND r.timestamp > NOW() - INTERVAL '%s hours'
                 GROUP BY a.name
                 """,
-                (_tenant_id, hours)
+                (_tenant_id, hours),
             )
             rows = cur.fetchall()
-            
+
             # Convert Decimals to floats for JSON compatibility
             result = []
             for row in rows:
@@ -342,12 +343,12 @@ def query_session_status(agent: str, char_limit: int = 200_000) -> dict:
     """
     if _tenant_id is None:
         init_db()
-    
+
     conn = _get_conn()
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SET LOCAL app.current_tenant = %s", (str(_tenant_id),))
-            
+
             # Get all recent turns for this agent, ordered chronologically
             cur.execute(
                 """
@@ -364,7 +365,7 @@ def query_session_status(agent: str, char_limit: int = 200_000) -> dict:
                 AND r.timestamp > NOW() - INTERVAL '24 hours'
                 ORDER BY r.timestamp ASC
                 """,
-                (_tenant_id, agent)
+                (_tenant_id, agent),
             )
             rows = cur.fetchall()
 
@@ -398,8 +399,12 @@ def query_session_status(agent: str, char_limit: int = 200_000) -> dict:
 
             # Last 5 turns for rolling averages
             last_5 = session_rows[-5:]
-            avg_cost_5 = sum(float(r["estimated_cost_usd"] or 0) for r in last_5) / max(len(last_5), 1)
-            total_cache_5 = sum((r["cache_read_tokens"] or 0) + (r["cache_write_tokens"] or 0) for r in last_5)
+            avg_cost_5 = sum(float(r["estimated_cost_usd"] or 0) for r in last_5) / max(
+                len(last_5), 1
+            )
+            total_cache_5 = sum(
+                (r["cache_read_tokens"] or 0) + (r["cache_write_tokens"] or 0) for r in last_5
+            )
             total_write_5 = sum(r["cache_write_tokens"] or 0 for r in last_5)
             cache_write_pct = total_write_5 / max(total_cache_5, 1)
 
@@ -456,7 +461,7 @@ def query_recent_events(limit: int = 100, after_id: Optional[UUID] = None):
                     ORDER BY r.timestamp DESC
                     LIMIT %s
                     """,
-                    (_tenant_id, after_id, limit)
+                    (_tenant_id, after_id, limit),
                 )
             else:
                 cur.execute(
@@ -478,7 +483,7 @@ def query_recent_events(limit: int = 100, after_id: Optional[UUID] = None):
                     ORDER BY r.timestamp DESC
                     LIMIT %s
                     """,
-                    (_tenant_id, limit)
+                    (_tenant_id, limit),
                 )
             rows = cur.fetchall()
             # Convert datetime objects to ISO format strings for JSON serialization

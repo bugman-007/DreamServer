@@ -15,10 +15,7 @@ logger = logging.getLogger(__name__)
 INSTALL_DIR = os.environ.get("DREAM_INSTALL_DIR", os.path.expanduser("~/dream-server"))
 DATA_DIR = os.environ.get("DREAM_DATA_DIR", os.path.expanduser("~/.dream-server"))
 EXTENSIONS_DIR = Path(
-    os.environ.get(
-        "DREAM_EXTENSIONS_DIR",
-        str(Path(INSTALL_DIR) / "extensions" / "services")
-    )
+    os.environ.get("DREAM_EXTENSIONS_DIR", str(Path(INSTALL_DIR) / "extensions" / "services"))
 )
 
 DEFAULT_SERVICE_HOST = os.environ.get("SERVICE_HOST", "host.docker.internal")
@@ -39,7 +36,9 @@ def _read_manifest_file(path: Path) -> dict[str, Any]:
     return data
 
 
-def load_extension_manifests(manifest_dir: Path, gpu_backend: str) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+def load_extension_manifests(
+    manifest_dir: Path, gpu_backend: str
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     """Load service and feature definitions from extension manifests."""
     services: dict[str, dict[str, Any]] = {}
     features: list[dict[str, Any]] = []
@@ -86,7 +85,11 @@ def load_extension_manifests(manifest_dir: Path, gpu_backend: str) -> tuple[dict
 
                 ext_port_env = service.get("external_port_env")
                 ext_port_default = service.get("external_port_default", service.get("port", 0))
-                external_port = int(os.environ.get(ext_port_env, str(ext_port_default))) if ext_port_env else int(ext_port_default)
+                external_port = (
+                    int(os.environ.get(ext_port_env, str(ext_port_default)))
+                    if ext_port_env
+                    else int(ext_port_default)
+                )
 
                 services[service_id] = {
                     "host": host,
@@ -103,7 +106,11 @@ def load_extension_manifests(manifest_dir: Path, gpu_backend: str) -> tuple[dict
                     if not isinstance(feature, dict):
                         continue
                     supported = feature.get("gpu_backends", ["amd", "nvidia", "apple"])
-                    if gpu_backend != "apple" and gpu_backend not in supported and "all" not in supported:
+                    if (
+                        gpu_backend != "apple"
+                        and gpu_backend not in supported
+                        and "all" not in supported
+                    ):
                         continue
                     if feature.get("id") and feature.get("name"):
                         features.append(feature)
@@ -112,7 +119,12 @@ def load_extension_manifests(manifest_dir: Path, gpu_backend: str) -> tuple[dict
         except Exception as e:
             logger.warning("Failed loading manifest %s: %s", path, e)
 
-    logger.info("Loaded %d extension manifests (%d services, %d features)", loaded, len(services), len(features))
+    logger.info(
+        "Loaded %d extension manifests (%d services, %d features)",
+        loaded,
+        len(services),
+        len(features),
+    )
     return services, features
 
 
@@ -121,7 +133,9 @@ def load_extension_manifests(manifest_dir: Path, gpu_backend: str) -> tuple[dict
 MANIFEST_SERVICES, MANIFEST_FEATURES = load_extension_manifests(EXTENSIONS_DIR, GPU_BACKEND)
 SERVICES = MANIFEST_SERVICES
 if not SERVICES:
-    logger.error("No services loaded from manifests in %s — dashboard will have no services", EXTENSIONS_DIR)
+    logger.error(
+        "No services loaded from manifests in %s — dashboard will have no services", EXTENSIONS_DIR
+    )
 
 # --- Features ---
 
@@ -147,11 +161,13 @@ WORKFLOW_DIR = resolve_workflow_dir()
 WORKFLOW_CATALOG_FILE = WORKFLOW_DIR / "catalog.json"
 DEFAULT_WORKFLOW_CATALOG = {"workflows": [], "categories": {}}
 
+
 def _default_n8n_url() -> str:
     cfg = SERVICES.get("n8n", {})
     host = cfg.get("host", "n8n")
     port = cfg.get("port", 5678)
     return f"http://{host}:{port}"
+
 
 N8N_URL = os.environ.get("N8N_URL", _default_n8n_url())
 N8N_API_KEY = os.environ.get("N8N_API_KEY", "")
@@ -164,18 +180,18 @@ PERSONAS = {
     "general": {
         "name": "General Helper",
         "system_prompt": "You are a friendly and helpful AI assistant. You're knowledgeable, patient, and aim to be genuinely useful. Keep responses clear and conversational.",
-        "icon": "\U0001f4ac"
+        "icon": "\U0001f4ac",
     },
     "coding": {
         "name": "Coding Buddy",
         "system_prompt": "You are a skilled programmer and technical assistant. You write clean, well-documented code and explain technical concepts clearly. You're precise, thorough, and love solving problems.",
-        "icon": "\U0001f4bb"
+        "icon": "\U0001f4bb",
     },
     "creative": {
         "name": "Creative Writer",
         "system_prompt": "You are an imaginative creative writer and storyteller. You craft vivid descriptions, engaging narratives, and think outside the box. You're expressive and enjoy wordplay.",
-        "icon": "\U0001f3a8"
-    }
+        "icon": "\U0001f3a8",
+    },
 }
 
 # --- Sidebar Icons ---

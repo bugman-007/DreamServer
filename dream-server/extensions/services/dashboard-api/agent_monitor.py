@@ -27,7 +27,7 @@ class AgentMetrics:
             "tokens_per_second": round(self.tokens_per_second, 2),
             "error_rate_1h": round(self.error_rate_1h, 2),
             "queue_depth": self.queue_depth,
-            "last_update": self.last_update.isoformat()
+            "last_update": self.last_update.isoformat(),
         }
 
 
@@ -44,9 +44,11 @@ class ClusterStatus:
         """Query cluster status from smart proxy"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "curl", "-s", f"http://localhost:{os.environ.get('CLUSTER_PROXY_PORT', '9199')}/status",
+                "curl",
+                "-s",
+                f"http://localhost:{os.environ.get('CLUSTER_PROXY_PORT', '9199')}/status",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
 
@@ -64,7 +66,7 @@ class ClusterStatus:
             "nodes": self.nodes,
             "total_gpus": self.total_gpus,
             "active_gpus": self.active_gpus,
-            "failover_ready": self.failover_ready
+            "failover_ready": self.failover_ready,
         }
 
 
@@ -77,16 +79,14 @@ class ThroughputMetrics:
 
     def add_sample(self, tokens_per_sec: float):
         """Add a new throughput sample"""
-        self.data_points.append({
-            "timestamp": datetime.now().isoformat(),
-            "tokens_per_sec": tokens_per_sec
-        })
+        self.data_points.append(
+            {"timestamp": datetime.now().isoformat(), "tokens_per_sec": tokens_per_sec}
+        )
 
         # Prune old data
         cutoff = datetime.now() - timedelta(minutes=self.history_minutes)
         self.data_points = [
-            p for p in self.data_points
-            if datetime.fromisoformat(p["timestamp"]) > cutoff
+            p for p in self.data_points if datetime.fromisoformat(p["timestamp"]) > cutoff
         ]
 
     def get_stats(self) -> dict:
@@ -99,7 +99,7 @@ class ThroughputMetrics:
             "current": values[-1] if values else 0,
             "average": sum(values) / len(values),
             "peak": max(values) if values else 0,
-            "history": self.data_points[-30:]  # Last 30 points
+            "history": self.data_points[-30:],  # Last 30 points
         }
 
 
@@ -130,5 +130,5 @@ def get_full_agent_metrics() -> dict:
         "timestamp": datetime.now().isoformat(),
         "agent": agent_metrics.to_dict(),
         "cluster": cluster_status.to_dict(),
-        "throughput": throughput.get_stats()
+        "throughput": throughput.get_stats(),
     }

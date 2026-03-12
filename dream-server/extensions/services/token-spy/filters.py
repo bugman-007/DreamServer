@@ -17,6 +17,7 @@ log = logging.getLogger("token-monitor")
 @dataclass
 class FilterResult:
     """Metrics captured during filtering."""
+
     tools_removed: int = 0
     tools_kept: int = 0
     system_chars_removed: int = 0
@@ -89,8 +90,9 @@ def apply_filters(body: dict, filter_settings: dict) -> tuple[dict, FilterResult
 # ── Filter 1: Tool Filtering ────────────────────────────────────────────────
 
 
-def _filter_tools(body: dict, cfg: dict, result: FilterResult,
-                  log_details: bool) -> tuple[dict, FilterResult]:
+def _filter_tools(
+    body: dict, cfg: dict, result: FilterResult, log_details: bool
+) -> tuple[dict, FilterResult]:
     """Filter tool schemas by blocklist or allowlist."""
     tools = body.get("tools", [])
     if not tools:
@@ -134,8 +136,9 @@ def _filter_tools(body: dict, cfg: dict, result: FilterResult,
 # ── Filter 2: System Prompt Trimming ─────────────────────────────────────────
 
 
-def _filter_system_prompt(body: dict, cfg: dict, result: FilterResult,
-                          log_details: bool) -> tuple[dict, FilterResult]:
+def _filter_system_prompt(
+    body: dict, cfg: dict, result: FilterResult, log_details: bool
+) -> tuple[dict, FilterResult]:
     """Trim system/developer role messages."""
     messages = body.get("messages", [])
     mode = cfg.get("mode", "strip_sections")
@@ -168,7 +171,11 @@ def _filter_system_prompt(body: dict, cfg: dict, result: FilterResult,
     if log_details and result.system_chars_removed > 0:
         log.info(
             f"[FILTER] System prompt trimmed by {result.system_chars_removed} chars"
-            + (f" (sections: {result.system_sections_stripped})" if result.system_sections_stripped else "")
+            + (
+                f" (sections: {result.system_sections_stripped})"
+                if result.system_sections_stripped
+                else ""
+            )
         )
 
     return body, result
@@ -185,7 +192,7 @@ def _strip_markdown_sections(text: str, section_headings: list[str]) -> tuple[st
     stripped = []
     for heading in section_headings:
         # Determine heading level from the heading string
-        m = re.match(r'^(#{1,6})\s+', heading)
+        m = re.match(r"^(#{1,6})\s+", heading)
         if not m:
             continue
         level = len(m.group(1))
@@ -193,12 +200,12 @@ def _strip_markdown_sections(text: str, section_headings: list[str]) -> tuple[st
         # at the same or higher level (fewer or equal #), or end of string
         escaped = re.escape(heading)
         pattern = re.compile(
-            rf'^{escaped}\s*\n'       # the heading line
-            rf'(.*?)'                  # content (non-greedy)
-            rf'(?=^#{{1,{level}}}\s|\Z)',  # lookahead: next heading at same/higher level or EOF
-            re.MULTILINE | re.DOTALL
+            rf"^{escaped}\s*\n"  # the heading line
+            rf"(.*?)"  # content (non-greedy)
+            rf"(?=^#{{1,{level}}}\s|\Z)",  # lookahead: next heading at same/higher level or EOF
+            re.MULTILINE | re.DOTALL,
         )
-        new_text, count = pattern.subn('', text)
+        new_text, count = pattern.subn("", text)
         if count > 0:
             stripped.append(heading)
             text = new_text
@@ -209,8 +216,9 @@ def _strip_markdown_sections(text: str, section_headings: list[str]) -> tuple[st
 # ── Filter 3: Conversation History ───────────────────────────────────────────
 
 
-def _filter_history(body: dict, cfg: dict, result: FilterResult,
-                    log_details: bool) -> tuple[dict, FilterResult]:
+def _filter_history(
+    body: dict, cfg: dict, result: FilterResult, log_details: bool
+) -> tuple[dict, FilterResult]:
     """Manage conversation history size."""
     messages = body.get("messages", [])
     if not messages:
@@ -290,7 +298,9 @@ def _filter_history(body: dict, cfg: dict, result: FilterResult,
         # Check if tail messages are already in filtered_conv
         # by comparing the last N messages
         tail_ids = {id(m) for m in tail}
-        existing_ids = {id(m) for m in filtered_conv[-always_keep_last_n:]} if filtered_conv else set()
+        existing_ids = (
+            {id(m) for m in filtered_conv[-always_keep_last_n:]} if filtered_conv else set()
+        )
         if not tail_ids.issubset(existing_ids):
             # Ensure tail messages are present — they may have been modified by
             # truncation but should still be in the list since we keep recent units

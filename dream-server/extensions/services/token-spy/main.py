@@ -25,9 +25,23 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 DB_BACKEND = os.environ.get("DB_BACKEND", "sqlite").lower()
 
 if DB_BACKEND == "postgres":
-    from db_postgres import init_db, log_usage, query_session_status, query_summary, query_usage, query_recent_events
+    from db_postgres import (
+        init_db,
+        log_usage,
+        query_session_status,
+        query_summary,
+        query_usage,
+        query_recent_events,
+    )
 else:
-    from db import init_db, log_usage, query_session_status, query_summary, query_usage, query_recent_events
+    from db import (
+        init_db,
+        log_usage,
+        query_session_status,
+        query_summary,
+        query_usage,
+        query_recent_events,
+    )
 
 from filters import apply_filters, FilterResult
 from providers import ProviderRegistry, AnthropicProvider, OpenAICompatibleProvider
@@ -110,8 +124,15 @@ _DEFAULT_SETTINGS = {
             "enabled": False,
             "mode": "allowlist",
             "allowlist": [
-                "exec", "read", "write", "edit", "apply_patch",
-                "web_fetch", "web_search", "process", "memory_search",
+                "exec",
+                "read",
+                "write",
+                "edit",
+                "apply_patch",
+                "web_fetch",
+                "web_search",
+                "process",
+                "memory_search",
                 "memory_get",
             ],
             "blocklist": [],
@@ -120,9 +141,13 @@ _DEFAULT_SETTINGS = {
             "enabled": False,
             "mode": "strip_sections",
             "strip_sections": [
-                "## Heartbeats", "## Silent Replies", "## OpenClaw Self-Update",
-                "## OpenClaw CLI Quick Reference", "## Reactions",
-                "## Sandbox", "## Model Aliases",
+                "## Heartbeats",
+                "## Silent Replies",
+                "## OpenClaw Self-Update",
+                "## OpenClaw CLI Quick Reference",
+                "## Reactions",
+                "## Sandbox",
+                "## Model Aliases",
             ],
             "custom_replacement": None,
             "max_chars": None,
@@ -297,6 +322,7 @@ def get_moonshot_client() -> httpx.AsyncClient:
 
 _db_available = True
 
+
 @app.on_event("startup")
 def on_startup():
     global _db_available
@@ -305,12 +331,17 @@ def on_startup():
         _db_available = True
     except Exception as e:
         _db_available = False
-        log.error(f"Database unavailable -- running in degraded mode (file-based session monitoring only): {e}")
+        log.error(
+            f"Database unavailable -- running in degraded mode (file-based session monitoring only): {e}"
+        )
     db_status = "connected" if _db_available else "DEGRADED"
-    log.info(f"Token monitor started for agent={AGENT_NAME}, provider={API_PROVIDER}, anthropic_upstream={ANTHROPIC_UPSTREAM}, openai_upstream={OPENAI_UPSTREAM}, db={db_status}")
+    log.info(
+        f"Token monitor started for agent={AGENT_NAME}, provider={API_PROVIDER}, anthropic_upstream={ANTHROPIC_UPSTREAM}, openai_upstream={OPENAI_UPSTREAM}, db={db_status}"
+    )
     # Start background polling for remote agents (A16 etc.)
     # Only the first instance (port 9110) runs the poller to avoid duplicates.
     import asyncio
+
     asyncio.get_event_loop().create_task(_poll_remote_agents())
 
 
@@ -330,12 +361,18 @@ async def _poll_remote_agents():
                 tool_results = status.get("tool_results", 0)
                 needs_reset = chars >= limit or rec == "reset_recommended"
                 if needs_reset:
-                    reason = f"tool loop ({tool_results} calls)" if tool_results >= 480 else f"history {chars:,} >= {limit:,}"
+                    reason = (
+                        f"tool loop ({tool_results} calls)"
+                        if tool_results >= 480
+                        else f"history {chars:,} >= {limit:,}"
+                    )
                     log.warning(f"[REMOTE-POLL] {agent}: auto-reset — {reason}")
                     _kill_session(agent, reason=f"auto-reset ({reason})")
                     _last_auto_reset[agent] = time.time()
                 elif chars > 0:
-                    log.info(f"[REMOTE-POLL] {agent}: {chars:,} / {limit:,} chars ({chars*100//limit}%)")
+                    log.info(
+                        f"[REMOTE-POLL] {agent}: {chars:,} / {limit:,} chars ({chars*100//limit}%)"
+                    )
             # Poll local-model agents (file-based, no proxy traffic)
             for agent in AGENT_SESSION_DIRS:
                 if agent == AGENT_NAME or agent in REMOTE_AGENTS:
@@ -351,12 +388,18 @@ async def _poll_remote_agents():
                 tool_results = status.get("tool_results", 0)
                 needs_reset = chars >= limit or rec == "reset_recommended"
                 if needs_reset:
-                    reason = f"tool loop ({tool_results} calls)" if tool_results >= 480 else f"history {chars:,} >= {limit:,}"
+                    reason = (
+                        f"tool loop ({tool_results} calls)"
+                        if tool_results >= 480
+                        else f"history {chars:,} >= {limit:,}"
+                    )
                     log.warning(f"[LOCAL-POLL] {agent}: auto-reset — {reason}")
                     _kill_session(agent, reason=f"auto-reset ({reason})")
                     _last_auto_reset[agent] = time.time()
                 elif chars > 0:
-                    log.info(f"[LOCAL-POLL] {agent}: {chars:,} / {limit:,} chars ({chars*100//limit}%)")
+                    log.info(
+                        f"[LOCAL-POLL] {agent}: {chars:,} / {limit:,} chars ({chars*100//limit}%)"
+                    )
         except Exception as e:
             log.error(f"[POLL] Error: {e}")
         await asyncio.sleep(60)
@@ -390,10 +433,7 @@ def analyze_system_prompt(system_blocks: list) -> dict:
         return {"system_prompt_total_chars": 0, "base_prompt_chars": 0}
 
     # Combine all system text blocks
-    text = "\n".join(
-        b.get("text", "") if isinstance(b, dict) else str(b)
-        for b in system_blocks
-    )
+    text = "\n".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in system_blocks)
     result = {"system_prompt_total_chars": len(text)}
 
     # Initialize all workspace columns to 0
@@ -407,7 +447,7 @@ def analyze_system_prompt(system_blocks: list) -> dict:
     # Instead, find each "## KNOWNFILE.md" marker and measure until the next known marker.
     ctx_match = re.search(r"^# Project Context\b", text, re.MULTILINE)
     if ctx_match:
-        after_ctx = text[ctx_match.start():]
+        after_ctx = text[ctx_match.start() :]
         # Build list of all known file markers: ## AGENTS.md, ## SOUL.md, etc.
         # Also include ## Silent Replies, ## Heartbeats, ## Runtime as end markers
         all_file_names = list(WORKSPACE_FILE_MAP.keys())
@@ -447,7 +487,9 @@ def analyze_system_prompt(system_blocks: list) -> dict:
                 result[col] += len(content)
             else:
                 result.setdefault("workspace_other_chars", 0)
-                result["workspace_other_chars"] = result.get("workspace_other_chars", 0) + len(content)
+                result["workspace_other_chars"] = result.get("workspace_other_chars", 0) + len(
+                    content
+                )
 
     # Extract skills section (## Skills (mandatory) ... until next ## at same level)
     skills_match = re.search(
@@ -458,8 +500,7 @@ def analyze_system_prompt(system_blocks: list) -> dict:
 
     # Base prompt = total minus workspace files and skills
     accounted = sum(
-        v for k, v in result.items()
-        if k.startswith("workspace_") or k == "skill_injection_chars"
+        v for k, v in result.items() if k.startswith("workspace_") or k == "skill_injection_chars"
     )
     result["base_prompt_chars"] = max(0, result["system_prompt_total_chars"] - accounted)
 
@@ -493,10 +534,16 @@ def analyze_messages(messages: list) -> dict:
     }
 
 
-def estimate_cost(model: str, input_tokens: int, output_tokens: int,
-                  cache_read: int, cache_write: int, provider_name: str = "anthropic") -> float:
+def estimate_cost(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read: int,
+    cache_write: int,
+    provider_name: str = "anthropic",
+) -> float:
     """Estimate USD cost based on model and token counts.
-    
+
     Uses the provider plugin system for pricing data. Falls back to hardcoded
     COST_PER_MILLION if provider lookup fails for backwards compatibility.
     """
@@ -506,12 +553,12 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int,
         "cache_read_tokens": cache_read,
         "cache_write_tokens": cache_write,
     }
-    
+
     # Try provider-based cost calculation first
     provider = ProviderRegistry.get_or_none(provider_name)
     if provider:
         return provider.calculate_cost(usage, model)
-    
+
     # Fallback to hardcoded rates for backwards compatibility
     rates = None
     model_lower = (model or "").lower()
@@ -533,6 +580,7 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int,
 # ── Message Cap Helper ────────────────────────────────────────────────────────
 
 # ── Proxy Endpoint ───────────────────────────────────────────────────────────
+
 
 @app.post("/v1/messages", dependencies=[Depends(verify_api_key)])
 async def proxy_messages(request: Request):
@@ -567,15 +615,27 @@ async def proxy_messages(request: Request):
 
     # Build upstream headers — forward everything relevant
     forward_headers = {}
-    for key in ("x-api-key", "anthropic-version", "content-type", "anthropic-beta",
-                "anthropic-dangerous-direct-browser-access", "user-agent", "x-app",
-                "accept", "authorization"):
+    for key in (
+        "x-api-key",
+        "anthropic-version",
+        "content-type",
+        "anthropic-beta",
+        "anthropic-dangerous-direct-browser-access",
+        "user-agent",
+        "x-app",
+        "accept",
+        "authorization",
+    ):
         val = request.headers.get(key)
         if val:
             forward_headers[key] = val
 
     # Inject environment API key if not provided in request (for external deployments)
-    if UPSTREAM_API_KEY and "x-api-key" not in forward_headers and "authorization" not in forward_headers:
+    if (
+        UPSTREAM_API_KEY
+        and "x-api-key" not in forward_headers
+        and "authorization" not in forward_headers
+    ):
         if API_PROVIDER == "anthropic":
             forward_headers["x-api-key"] = UPSTREAM_API_KEY
         else:
@@ -585,18 +645,31 @@ async def proxy_messages(request: Request):
 
     if is_streaming:
         return await _handle_streaming(
-            client, raw_body, forward_headers, model, sys_analysis, msg_analysis,
-            tools, start,
+            client,
+            raw_body,
+            forward_headers,
+            model,
+            sys_analysis,
+            msg_analysis,
+            tools,
+            start,
         )
     else:
         return await _handle_non_streaming(
-            client, raw_body, forward_headers, model, sys_analysis, msg_analysis,
-            tools, start,
+            client,
+            raw_body,
+            forward_headers,
+            model,
+            sys_analysis,
+            msg_analysis,
+            tools,
+            start,
         )
 
 
-async def _handle_streaming(client, raw_body, headers, model, sys_analysis,
-                            msg_analysis, tools, start_time):
+async def _handle_streaming(
+    client, raw_body, headers, model, sys_analysis, msg_analysis, tools, start_time
+):
     """Stream SSE response through while capturing token metrics."""
 
     # State for capturing usage from SSE events
@@ -613,7 +686,8 @@ async def _handle_streaming(client, raw_body, headers, model, sys_analysis,
         logged = False
         try:
             async with client.stream(
-                "POST", "/v1/messages",
+                "POST",
+                "/v1/messages",
                 content=raw_body,
                 headers=headers,
             ) as upstream:
@@ -635,10 +709,12 @@ async def _handle_streaming(client, raw_body, headers, model, sys_analysis,
                             continue
 
                         if current_event == "message_start":
-                            msg_usage = (data.get("message", {}).get("usage", {}))
+                            msg_usage = data.get("message", {}).get("usage", {})
                             usage["input_tokens"] = msg_usage.get("input_tokens", 0)
                             usage["cache_read_tokens"] = msg_usage.get("cache_read_input_tokens", 0)
-                            usage["cache_write_tokens"] = msg_usage.get("cache_creation_input_tokens", 0)
+                            usage["cache_write_tokens"] = msg_usage.get(
+                                "cache_creation_input_tokens", 0
+                            )
 
                         elif current_event == "message_delta":
                             delta_usage = data.get("usage", {})
@@ -651,8 +727,13 @@ async def _handle_streaming(client, raw_body, headers, model, sys_analysis,
                         elif current_event == "message_stop":
                             # Stream complete — log metrics
                             _log_entry(
-                                model, sys_analysis, msg_analysis, tools,
-                                raw_body, usage, start_time,
+                                model,
+                                sys_analysis,
+                                msg_analysis,
+                                tools,
+                                raw_body,
+                                usage,
+                                start_time,
                                 provider_name="anthropic",
                             )
                             logged = True
@@ -666,8 +747,13 @@ async def _handle_streaming(client, raw_body, headers, model, sys_analysis,
             # (which is a BaseException and bypasses 'except Exception')
             if not logged and usage["input_tokens"] > 0:
                 _log_entry(
-                    model, sys_analysis, msg_analysis, tools,
-                    raw_body, usage, start_time,
+                    model,
+                    sys_analysis,
+                    msg_analysis,
+                    tools,
+                    raw_body,
+                    usage,
+                    start_time,
                     provider_name="anthropic",
                 )
 
@@ -682,12 +768,14 @@ async def _handle_streaming(client, raw_body, headers, model, sys_analysis,
     )
 
 
-async def _handle_non_streaming(client, raw_body, headers, model, sys_analysis,
-                                msg_analysis, tools, start_time):
+async def _handle_non_streaming(
+    client, raw_body, headers, model, sys_analysis, msg_analysis, tools, start_time
+):
     """Handle non-streaming requests (rare for OpenClaw, but support anyway)."""
     try:
         resp = await client.request(
-            "POST", "/v1/messages",
+            "POST",
+            "/v1/messages",
             content=raw_body,
             headers=headers,
         )
@@ -712,7 +800,16 @@ async def _handle_non_streaming(client, raw_body, headers, model, sys_analysis,
         "stop_reason": data.get("stop_reason"),
     }
 
-    _log_entry(model, sys_analysis, msg_analysis, tools, raw_body, usage, start_time, provider_name="anthropic")
+    _log_entry(
+        model,
+        sys_analysis,
+        msg_analysis,
+        tools,
+        raw_body,
+        usage,
+        start_time,
+        provider_name="anthropic",
+    )
 
     return Response(
         content=resp.content,
@@ -722,6 +819,7 @@ async def _handle_non_streaming(client, raw_body, headers, model, sys_analysis,
 
 
 # ── OpenAI-Compatible Proxy (Moonshot/Kimi) ──────────────────────────────────
+
 
 def _analyze_openai_messages(messages: list) -> dict:
     """Analyze OpenAI-format messages for metrics."""
@@ -821,18 +919,41 @@ async def proxy_chat_completions(request: Request):
 
     if is_streaming:
         return await _handle_openai_streaming(
-            client, raw_body, forward_headers, model, sys_analysis, msg_analysis,
-            tools, start, filter_result=filter_result,
+            client,
+            raw_body,
+            forward_headers,
+            model,
+            sys_analysis,
+            msg_analysis,
+            tools,
+            start,
+            filter_result=filter_result,
         )
     else:
         return await _handle_openai_non_streaming(
-            client, raw_body, forward_headers, model, sys_analysis, msg_analysis,
-            tools, start, filter_result=filter_result,
+            client,
+            raw_body,
+            forward_headers,
+            model,
+            sys_analysis,
+            msg_analysis,
+            tools,
+            start,
+            filter_result=filter_result,
         )
 
 
-async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysis,
-                                   msg_analysis, tools, start_time, filter_result=None):
+async def _handle_openai_streaming(
+    client,
+    raw_body,
+    headers,
+    model,
+    sys_analysis,
+    msg_analysis,
+    tools,
+    start_time,
+    filter_result=None,
+):
     """Stream OpenAI SSE response through while capturing token metrics."""
     usage = {
         "input_tokens": 0,
@@ -846,7 +967,8 @@ async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysi
         logged = False
         try:
             async with client.stream(
-                "POST", "/v1/chat/completions",
+                "POST",
+                "/v1/chat/completions",
                 content=raw_body,
                 headers=headers,
             ) as upstream:
@@ -854,7 +976,9 @@ async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysi
                     err_body = b""
                     async for chunk in upstream.aiter_bytes():
                         err_body += chunk
-                    log.error(f"Upstream {upstream.status_code}: {err_body[:2000].decode(errors='replace')}")
+                    log.error(
+                        f"Upstream {upstream.status_code}: {err_body[:2000].decode(errors='replace')}"
+                    )
                     yield f"data: {err_body.decode(errors='replace')}\n\n"
                     return
                 async for line in upstream.aiter_lines():
@@ -866,8 +990,13 @@ async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysi
                     data_str = stripped[5:].strip()
                     if data_str == "[DONE]":
                         _log_entry(
-                            model, sys_analysis, msg_analysis, tools,
-                            raw_body, usage, start_time,
+                            model,
+                            sys_analysis,
+                            msg_analysis,
+                            tools,
+                            raw_body,
+                            usage,
+                            start_time,
                             provider_name="openai",
                             filter_result=filter_result,
                         )
@@ -883,7 +1012,9 @@ async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysi
                     if chunk_usage:
                         usage["input_tokens"] = chunk_usage.get("prompt_tokens", 0)
                         usage["output_tokens"] = chunk_usage.get("completion_tokens", 0)
-                        usage["cache_read_tokens"] = chunk_usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+                        usage["cache_read_tokens"] = chunk_usage.get(
+                            "prompt_tokens_details", {}
+                        ).get("cached_tokens", 0)
 
                     choices = data.get("choices", [])
                     if choices:
@@ -899,7 +1030,17 @@ async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysi
         finally:
             # Guarantee billing metrics are logged even on CancelledError
             if not logged and usage["input_tokens"] > 0:
-                _log_entry(model, sys_analysis, msg_analysis, tools, raw_body, usage, start_time, provider_name="openai", filter_result=filter_result)
+                _log_entry(
+                    model,
+                    sys_analysis,
+                    msg_analysis,
+                    tools,
+                    raw_body,
+                    usage,
+                    start_time,
+                    provider_name="openai",
+                    filter_result=filter_result,
+                )
 
     return StreamingResponse(
         stream_and_capture(),
@@ -912,12 +1053,22 @@ async def _handle_openai_streaming(client, raw_body, headers, model, sys_analysi
     )
 
 
-async def _handle_openai_non_streaming(client, raw_body, headers, model, sys_analysis,
-                                       msg_analysis, tools, start_time, filter_result=None):
+async def _handle_openai_non_streaming(
+    client,
+    raw_body,
+    headers,
+    model,
+    sys_analysis,
+    msg_analysis,
+    tools,
+    start_time,
+    filter_result=None,
+):
     """Handle non-streaming OpenAI-format requests."""
     try:
         resp = await client.request(
-            "POST", "/v1/chat/completions",
+            "POST",
+            "/v1/chat/completions",
             content=raw_body,
             headers=headers,
         )
@@ -939,10 +1090,22 @@ async def _handle_openai_non_streaming(client, raw_body, headers, model, sys_ana
         "output_tokens": resp_usage.get("completion_tokens", 0),
         "cache_read_tokens": resp_usage.get("prompt_tokens_details", {}).get("cached_tokens", 0),
         "cache_write_tokens": 0,
-        "stop_reason": (data.get("choices", [{}])[0].get("finish_reason") if data.get("choices") else None),
+        "stop_reason": (
+            data.get("choices", [{}])[0].get("finish_reason") if data.get("choices") else None
+        ),
     }
 
-    _log_entry(model, sys_analysis, msg_analysis, tools, raw_body, usage, start_time, provider_name="openai", filter_result=filter_result)
+    _log_entry(
+        model,
+        sys_analysis,
+        msg_analysis,
+        tools,
+        raw_body,
+        usage,
+        start_time,
+        provider_name="openai",
+        filter_result=filter_result,
+    )
 
     return Response(
         content=resp.content,
@@ -985,7 +1148,6 @@ AUTO_RESET_HISTORY_CHARS = 200_000
 _last_auto_reset: dict[str, float] = {}
 
 
-
 def _get_local_session_status(agent: str) -> dict:
     """Get session status for a local agent by reading JSONL files directly.
     Used for agents whose traffic doesn't pass through the token monitor proxy
@@ -995,7 +1157,10 @@ def _get_local_session_status(agent: str) -> dict:
         return None
 
     import glob
-    files = sorted(glob.glob(os.path.join(sessions_dir, "*.jsonl")), key=os.path.getmtime, reverse=True)
+
+    files = sorted(
+        glob.glob(os.path.join(sessions_dir, "*.jsonl")), key=os.path.getmtime, reverse=True
+    )
     if not files:
         return None
 
@@ -1080,6 +1245,7 @@ def _get_local_accumulated_turns(agent: str) -> int:
     # Use user turns if available; fall back to assistant turns for agents
     # whose OpenClaw gateway doesn't log user messages in the JSONL.
     import glob
+
     files = glob.glob(os.path.join(sessions_dir, "*.jsonl"))
     user_turns = 0
     assistant_turns = 0
@@ -1117,7 +1283,7 @@ def _get_local_accumulated_turns(agent: str) -> int:
 
     if current_file_turns >= last_file_turns:
         # Normal growth or no change — add the delta
-        total += (current_file_turns - last_file_turns)
+        total += current_file_turns - last_file_turns
     else:
         # Session files were purged (current < last) — add what's on disk now
         total += current_file_turns
@@ -1136,18 +1302,27 @@ def _get_local_accumulated_turns(agent: str) -> int:
 def _get_remote_session_status(agent: str) -> dict:
     """Get session status for a remote agent via SSH."""
     import subprocess
+
     remote = REMOTE_AGENTS.get(agent)
     if not remote:
-        return {"agent": agent, "recommendation": "no_data", "current_session_turns": 0,
-                "current_history_chars": 0, "last_turn_cost": 0, "avg_cost_last_5": 0,
-                "cache_write_pct_last_5": 0, "cost_since_last_reset": 0, "turns_since_last_reset": 0}
+        return {
+            "agent": agent,
+            "recommendation": "no_data",
+            "current_session_turns": 0,
+            "current_history_chars": 0,
+            "last_turn_cost": 0,
+            "avg_cost_last_5": 0,
+            "cache_write_pct_last_5": 0,
+            "cost_since_last_reset": 0,
+            "turns_since_last_reset": 0,
+        }
 
     ssh_target = f"{remote['user']}@{remote['host']}"
     sessions_dir = remote["sessions_dir"]
 
     script = (
         "import json, os, glob\n"
-        f"sdir = \"{sessions_dir}\"\n"
+        f'sdir = "{sessions_dir}"\n'
         "files = sorted(glob.glob(os.path.join(sdir, '*.jsonl')), key=os.path.getmtime, reverse=True)\n"
         "if not files:\n"
         "    print(json.dumps({'turns': 0, 'chars': 0, 'files': 0}))\n"
@@ -1178,15 +1353,34 @@ def _get_remote_session_status(agent: str) -> dict:
     )
     try:
         result = subprocess.run(
-            ["ssh", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new",
-             ssh_target, "python3", "-"],
-            input=script, capture_output=True, text=True, timeout=10,
+            [
+                "ssh",
+                "-o",
+                "ConnectTimeout=3",
+                "-o",
+                "StrictHostKeyChecking=accept-new",
+                ssh_target,
+                "python3",
+                "-",
+            ],
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             log.warning(f"[REMOTE] SSH to {agent} failed: {result.stderr[:200]}")
-            return {"agent": agent, "recommendation": "no_data", "current_session_turns": 0,
-                    "current_history_chars": 0, "last_turn_cost": 0, "avg_cost_last_5": 0,
-                    "cache_write_pct_last_5": 0, "cost_since_last_reset": 0, "turns_since_last_reset": 0}
+            return {
+                "agent": agent,
+                "recommendation": "no_data",
+                "current_session_turns": 0,
+                "current_history_chars": 0,
+                "last_turn_cost": 0,
+                "avg_cost_last_5": 0,
+                "cache_write_pct_last_5": 0,
+                "cost_since_last_reset": 0,
+                "turns_since_last_reset": 0,
+            }
 
         data = json.loads(result.stdout.strip())
         history_chars = data.get("chars", 0)
@@ -1196,7 +1390,9 @@ def _get_remote_session_status(agent: str) -> dict:
         limit = get_agent_setting(agent, "session_char_limit") or AUTO_RESET_HISTORY_CHARS
         if tool_results >= 480:
             rec = "reset_recommended"
-            log.warning(f"[REMOTE] {agent}: tool loop detected ({tool_results} tool results in session)")
+            log.warning(
+                f"[REMOTE] {agent}: tool loop detected ({tool_results} tool results in session)"
+            )
         elif history_chars > limit:
             rec = "reset_recommended"
         elif history_chars > limit * 0.8:
@@ -1221,14 +1417,23 @@ def _get_remote_session_status(agent: str) -> dict:
         }
     except Exception as e:
         log.warning(f"[REMOTE] Failed to get session status for {agent}: {e}")
-        return {"agent": agent, "recommendation": "no_data", "current_session_turns": 0,
-                "current_history_chars": 0, "last_turn_cost": 0, "avg_cost_last_5": 0,
-                "cache_write_pct_last_5": 0, "cost_since_last_reset": 0, "turns_since_last_reset": 0}
+        return {
+            "agent": agent,
+            "recommendation": "no_data",
+            "current_session_turns": 0,
+            "current_history_chars": 0,
+            "last_turn_cost": 0,
+            "avg_cost_last_5": 0,
+            "cache_write_pct_last_5": 0,
+            "cost_since_last_reset": 0,
+            "turns_since_last_reset": 0,
+        }
 
 
 def _kill_remote_session(agent: str, reason: str = "dashboard") -> dict:
     """Kill the largest session for a remote agent via SSH."""
     import subprocess
+
     remote = REMOTE_AGENTS.get(agent)
     if not remote:
         return {"agent": agent, "action": "none", "reason": f"unknown remote agent: {agent}"}
@@ -1238,7 +1443,7 @@ def _kill_remote_session(agent: str, reason: str = "dashboard") -> dict:
 
     script = (
         "import os, glob, json\n"
-        f"sdir = \"{sessions_dir}\"\n"
+        f'sdir = "{sessions_dir}"\n'
         "files = sorted(glob.glob(os.path.join(sdir, '*.jsonl')), key=os.path.getsize, reverse=True)\n"
         "if not files:\n"
         "    print(json.dumps({'action': 'none', 'reason': 'no sessions'}))\n"
@@ -1258,24 +1463,43 @@ def _kill_remote_session(agent: str, reason: str = "dashboard") -> dict:
     )
     try:
         result = subprocess.run(
-            ["ssh", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new",
-             ssh_target, "python3", "-"],
-            input=script, capture_output=True, text=True, timeout=10,
+            [
+                "ssh",
+                "-o",
+                "ConnectTimeout=3",
+                "-o",
+                "StrictHostKeyChecking=accept-new",
+                ssh_target,
+                "python3",
+                "-",
+            ],
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
-            return {"agent": agent, "action": "none", "reason": f"SSH failed: {result.stderr[:100]}"}
+            return {
+                "agent": agent,
+                "action": "none",
+                "reason": f"SSH failed: {result.stderr[:100]}",
+            }
         data = json.loads(result.stdout.strip())
         data["agent"] = agent
         if data.get("action") == "killed":
-            log.warning(f"[RESET] Remote killed session {data.get('session_id')} for {agent} ({data.get('size_bytes')} bytes) — {reason}")
+            log.warning(
+                f"[RESET] Remote killed session {data.get('session_id')} for {agent} ({data.get('size_bytes')} bytes) — {reason}"
+            )
         return data
     except Exception as e:
         log.error(f"Remote session check failed for {agent}: {e}")
         return {"agent": agent, "action": "none", "reason": "Remote check failed"}
 
+
 def _kill_session(agent: str, reason: str = "manual") -> dict:
     """Kill the largest active session for an agent. Returns result dict."""
     import subprocess
+
     if agent in REMOTE_AGENTS:
         return _kill_remote_session(agent, reason)
 
@@ -1285,7 +1509,8 @@ def _kill_session(agent: str, reason: str = "manual") -> dict:
 
     result = subprocess.run(
         ["ls", "-S", f"{sessions_dir}/"],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     largest = None
     for line in result.stdout.strip().split("\n"):
@@ -1309,7 +1534,9 @@ def _kill_session(agent: str, reason: str = "manual") -> dict:
     try:
         with open(sessions_json, "r") as f:
             data = json.load(f)
-        to_remove = [k for k, v in data.items() if isinstance(v, dict) and v.get("sessionId") == largest]
+        to_remove = [
+            k for k, v in data.items() if isinstance(v, dict) and v.get("sessionId") == largest
+        ]
         for k in to_remove:
             del data[k]
         with open(sessions_json, "w") as f:
@@ -1323,7 +1550,7 @@ def _kill_session(agent: str, reason: str = "manual") -> dict:
 
 def _auto_reset_check(agent: str, history_chars: int):
     """Check if session should be auto-reset based on history size.
-    
+
     Uses dynamic settings from settings.json (editable via dashboard).
     Per-agent overrides take precedence over the global session_char_limit.
     """
@@ -1349,8 +1576,17 @@ def _auto_reset_check(agent: str, history_chars: int):
         log.warning(f"[AUTO-RESET] {agent} session killed: {result.get('session_id')}")
 
 
-def _log_entry(model, sys_analysis, msg_analysis, tools, raw_body, usage, start_time,
-               provider_name: str = None, filter_result=None):
+def _log_entry(
+    model,
+    sys_analysis,
+    msg_analysis,
+    tools,
+    raw_body,
+    usage,
+    start_time,
+    provider_name: str = None,
+    filter_result=None,
+):
     """Write a usage entry to SQLite.
 
     Args:
@@ -1418,6 +1654,7 @@ def _log_entry(model, sys_analysis, msg_analysis, tools, raw_body, usage, start_
 
 # ── Health ───────────────────────────────────────────────────────────────────
 
+
 @app.get("/health")
 def health():
     uptime = int(time.time() - START_TIME)
@@ -1459,7 +1696,9 @@ def api_filter_stats():
         "history": {
             "enabled": f_settings.get("history", {}).get("enabled", False),
             "max_pairs": f_settings.get("history", {}).get("max_pairs"),
-            "truncate_tool_results_chars": f_settings.get("history", {}).get("truncate_tool_results_chars"),
+            "truncate_tool_results_chars": f_settings.get("history", {}).get(
+                "truncate_tool_results_chars"
+            ),
         },
     }
 
@@ -1469,8 +1708,12 @@ def api_get_settings():
     """Current settings. Per-agent values of null inherit the global default."""
     settings = load_settings()
     for agent_name, agent_cfg in settings.get("agents", {}).items():
-        agent_cfg["_effective_session_char_limit"] = get_agent_setting(agent_name, "session_char_limit")
-        agent_cfg["_effective_poll_interval_minutes"] = get_agent_setting(agent_name, "poll_interval_minutes")
+        agent_cfg["_effective_session_char_limit"] = get_agent_setting(
+            agent_name, "session_char_limit"
+        )
+        agent_cfg["_effective_poll_interval_minutes"] = get_agent_setting(
+            agent_name, "poll_interval_minutes"
+        )
     return settings
 
 
@@ -1491,7 +1734,9 @@ async def api_update_settings(request: Request):
         if val is not None:
             val = int(val)
             if val < 10000:
-                return JSONResponse({"error": "session_char_limit must be >= 10000"}, status_code=400)
+                return JSONResponse(
+                    {"error": "session_char_limit must be >= 10000"}, status_code=400
+                )
         settings["session_char_limit"] = val
 
     if "poll_interval_minutes" in body:
@@ -1499,7 +1744,9 @@ async def api_update_settings(request: Request):
         if val is not None:
             val = int(val)
             if val < 1 or val > 60:
-                return JSONResponse({"error": "poll_interval_minutes must be 1-60"}, status_code=400)
+                return JSONResponse(
+                    {"error": "poll_interval_minutes must be 1-60"}, status_code=400
+                )
         settings["poll_interval_minutes"] = val
 
     # Deep-merge filter settings (hot-reloadable)
@@ -1539,11 +1786,15 @@ async def api_update_settings(request: Request):
 def _update_timer_interval(minutes: int):
     """Best-effort update of the systemd timer interval."""
     import subprocess
-    timer_path = os.environ.get("SESSION_TIMER_PATH", "/etc/systemd/system/openclaw-session-cleanup.timer")
+
+    timer_path = os.environ.get(
+        "SESSION_TIMER_PATH", "/etc/systemd/system/openclaw-session-cleanup.timer"
+    )
     try:
         with open(timer_path, "r") as f:
             timer_content = f.read()
         import re as _re
+
         new_content = _re.sub(
             r"OnUnitActiveSec=\d+min",
             f"OnUnitActiveSec={minutes}min",
@@ -1553,10 +1804,13 @@ def _update_timer_interval(minutes: int):
             with open(timer_path, "w") as f:
                 f.write(new_content)
             subprocess.run(["systemctl", "daemon-reload"], capture_output=True)
-            subprocess.run(["systemctl", "restart", "openclaw-session-cleanup.timer"], capture_output=True)
+            subprocess.run(
+                ["systemctl", "restart", "openclaw-session-cleanup.timer"], capture_output=True
+            )
             log.info(f"[SETTINGS] Timer updated to {minutes}min")
     except Exception as e:
         log.warning(f"[SETTINGS] Could not update timer: {e} (may need sudo)")
+
 
 @app.get("/api/usage", dependencies=[Depends(verify_api_key)])
 def api_usage(agent: str | None = None, hours: int = 24, limit: int = 200):
@@ -1591,17 +1845,19 @@ def api_summary(hours: int = 24):
             if accumulated_turns > 0 or (local and local.get("current_session_turns", 0) > 0):
                 current_chars = local.get("current_history_chars", 0) if local else 0
                 is_local = agent_name in LOCAL_MODEL_AGENTS
-                result.append({
-                    "agent": agent_name,
-                    "turns": accumulated_turns,
-                    "total_input_tokens": current_chars // 4,
-                    "total_output_tokens": 0,
-                    "total_cost": 0,
-                    "total_cache_read": 0,
-                    "total_cache_write": 0,
-                    "avg_input_tokens": (current_chars // 4) // max(accumulated_turns, 1),
-                    "is_local_model": is_local,
-                })
+                result.append(
+                    {
+                        "agent": agent_name,
+                        "turns": accumulated_turns,
+                        "total_input_tokens": current_chars // 4,
+                        "total_output_tokens": 0,
+                        "total_cost": 0,
+                        "total_cache_read": 0,
+                        "total_cache_write": 0,
+                        "avg_input_tokens": (current_chars // 4) // max(accumulated_turns, 1),
+                        "is_local_model": is_local,
+                    }
+                )
     return result
 
 
@@ -1640,8 +1896,10 @@ def api_reset_session(agent: str):
     """Kill the largest active session for an agent (safety valve trigger)."""
     if not AGENT_SESSION_DIRS.get(agent) and agent not in REMOTE_AGENTS:
         return JSONResponse(
-            {"error": f"Session reset not configured for agent: {agent}. Set AGENT_SESSION_DIRS env var."},
-            status_code=400
+            {
+                "error": f"Session reset not configured for agent: {agent}. Set AGENT_SESSION_DIRS env var."
+            },
+            status_code=400,
         )
     return _kill_session(agent, reason="dashboard")
 
@@ -1896,7 +2154,7 @@ function renderSessionPanel(sessions) {
     const showReset = ['reset_recommended', 'compact_soon', 'monitor'].includes(rec);
     const isLocal = s.is_local_model;
     const cardClass = 'session-card' + (isLocal ? ' local-model' : '');
-    const agentLabel = s.agent + (isLocal ? '<span class="agent-type">\u26A1 Self-Hosted</span>' : '');
+    const agentLabel = s.agent + (isLocal ? '<span class="agent-type">\u26a1 Self-Hosted</span>' : '');
     const limit = s.session_char_limit || 200000;
     const pct = limit > 0 ? Math.round((s.current_history_chars / limit) * 100) : 0;
     const barColor = pct > 80 ? '#da3633' : pct > 60 ? '#9e6a03' : '#238636';
@@ -1908,7 +2166,7 @@ function renderSessionPanel(sessions) {
       '<div class="session-stat" style="font-size:0.8em;color:#8b949e;margin-top:-4px"><span class="label"></span><span>~' + fmt(Math.round(s.current_history_chars / 4)) + ' / ' + fmt(Math.round(limit / 4)) + ' tokens</span></div>' +
       '<div style="background:#21262d;border-radius:3px;height:4px;margin:2px 0 6px"><div style="background:' + barColor + ';height:100%;border-radius:3px;width:' + Math.min(pct, 100) + '%"></div></div>' +
       (isLocal ?
-        '<div class="session-stat"><span class="label">Inference</span><span style="color:#3fb950">\u26A1 Local GPU \u2014 $0.00/token</span></div>'
+        '<div class="session-stat"><span class="label">Inference</span><span style="color:#3fb950">\u26a1 Local GPU \u2014 $0.00/token</span></div>'
       :
         '<div class="session-stat"><span class="label">Last turn cost</span><span class="cost">' + fmtCost(s.last_turn_cost) + '</span></div>' +
         '<div class="session-stat"><span class="label">Avg cost (last 5)</span><span class="cost">' + fmtCost(s.avg_cost_last_5) + '</span></div>' +
@@ -1945,7 +2203,7 @@ function renderSummary(data) {
     '<div class="card"><h3>Cache Efficiency</h3><div class="value cache">' + cacheReadPct + '%</div><div class="sub">' + fmt(totalCacheRead) + ' reads / ' + fmt(totalCacheWrite) + ' writes</div></div>';
   data.forEach(d => {
     if (d.is_local_model) {
-      html += '<div class="card" style="border-color:#3fb95044;background:linear-gradient(135deg,#161b22,#0d1a12)"><h3>' + d.agent.toUpperCase() + ' <span style="color:#3fb950;font-size:10px;background:#3fb95018;border:1px solid #3fb95044;padding:2px 7px;border-radius:10px;font-weight:600;letter-spacing:0.5px">\u26A1 SELF-HOSTED</span></h3><div class="value">' + d.turns + ' turns</div><div class="sub" style="color:#3fb950">$0.00 \u2014 local GPU | ~' + fmt(d.avg_input_tokens) + ' tokens/turn</div></div>';
+      html += '<div class="card" style="border-color:#3fb95044;background:linear-gradient(135deg,#161b22,#0d1a12)"><h3>' + d.agent.toUpperCase() + ' <span style="color:#3fb950;font-size:10px;background:#3fb95018;border:1px solid #3fb95044;padding:2px 7px;border-radius:10px;font-weight:600;letter-spacing:0.5px">\u26a1 SELF-HOSTED</span></h3><div class="value">' + d.turns + ' turns</div><div class="sub" style="color:#3fb950">$0.00 \u2014 local GPU | ~' + fmt(d.avg_input_tokens) + ' tokens/turn</div></div>';
     } else {
       html += '<div class="card"><h3>' + d.agent.toUpperCase() + '</h3><div class="value">' + d.turns + ' turns</div><div class="sub">' + fmtCost(d.total_cost) + ' | avg ' + fmt(d.avg_input_tokens) + ' in/turn</div></div>';
     }
@@ -2291,16 +2549,18 @@ def dashboard():
 
 # ── SSE Token Events Stream ─────────────────────────────────────────────────
 
+
 @app.get("/token_events", dependencies=[Depends(verify_api_key)])
 async def token_events(request: Request):
     """Stream token usage events as Server-Sent Events."""
+
     async def event_stream():
         last_id = None
         while True:
             try:
                 # Query recent events
                 events = query_recent_events(limit=50, after_id=last_id)
-                
+
                 for event in events:
                     # Format event as SSE
                     event_data = {
@@ -2313,23 +2573,23 @@ async def token_events(request: Request):
                         "total_tokens": event.get("total_tokens", 0),
                         "cost_usd": float(event.get("cost_usd", 0) or 0),
                         "timestamp": event.get("timestamp", ""),
-                        "agent_name": event.get("agent_name", AGENT_NAME)
+                        "agent_name": event.get("agent_name", AGENT_NAME),
                     }
-                    
+
                     yield f"data: {json.dumps(event_data)}\n\n"
                     last_id = event.get("id")
-                
+
                 # Heartbeat to keep connection alive
                 yield ":heartbeat\n\n"
-                
+
                 # Wait before next poll
                 await asyncio.sleep(2)
-                
+
             except Exception as e:
                 log.error(f"SSE stream error: {e}")
                 yield f"event: error\ndata: {json.dumps({'error': 'Stream error'})}\n\n"
                 await asyncio.sleep(5)
-    
+
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
@@ -2343,6 +2603,7 @@ async def token_events(request: Request):
 
 # ── Catch-all for other endpoints ────────────────────────────────────────────
 
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_other(request: Request, path: str):
     """Forward any other requests to upstream transparently."""
@@ -2352,8 +2613,15 @@ async def proxy_other(request: Request, path: str):
     else:
         client = get_http_client()
     headers = {}
-    for key in ("x-api-key", "anthropic-version", "content-type", "anthropic-beta",
-                "authorization", "accept", "user-agent"):
+    for key in (
+        "x-api-key",
+        "anthropic-version",
+        "content-type",
+        "anthropic-beta",
+        "authorization",
+        "accept",
+        "user-agent",
+    ):
         val = request.headers.get(key)
         if val:
             headers[key] = val

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # connections every poll cycle and prevents file-descriptor exhaustion.
 
 _aio_session: Optional[aiohttp.ClientSession] = None
-_HEALTH_TIMEOUT = aiohttp.ClientTimeout(total=5)   # match Docker's own 5 s timeout
+_HEALTH_TIMEOUT = aiohttp.ClientTimeout(total=5)  # match Docker's own 5 s timeout
 
 
 async def _get_aio_session() -> aiohttp.ClientSession:
@@ -71,6 +71,7 @@ def _get_lifetime_tokens() -> int:
 
 
 # --- LLM Metrics ---
+
 
 async def get_llama_metrics(model_hint: Optional[str] = None) -> dict:
     """Get inference metrics from llama-server Prometheus /metrics endpoint.
@@ -157,12 +158,13 @@ async def get_llama_context_size(model_hint: Optional[str] = None) -> Optional[i
 
 # --- Service Health ---
 
+
 async def check_service_health(service_id: str, config: dict) -> ServiceStatus:
     """Check if a service is healthy by hitting its health endpoint."""
     if config.get("type") == "host-systemd":
         return await _check_host_service_health(service_id, config)
 
-    host = config.get('host', 'localhost')
+    host = config.get("host", "localhost")
     url = f"http://{host}:{config['port']}{config['health']}"
     status = "unknown"
     response_time = None
@@ -187,9 +189,12 @@ async def check_service_health(service_id: str, config: dict) -> ServiceStatus:
         status = "down"
 
     return ServiceStatus(
-        id=service_id, name=config["name"], port=config["port"],
+        id=service_id,
+        name=config["name"],
+        port=config["port"],
         external_port=config.get("external_port", config["port"]),
-        status=status, response_time_ms=round(response_time, 1) if response_time else None
+        status=status,
+        response_time_ms=round(response_time, 1) if response_time else None,
     )
 
 
@@ -212,9 +217,12 @@ async def _check_host_service_health(service_id: str, config: dict) -> ServiceSt
         logger.debug(f"Host health check failed for {service_id} at {url}: {e}")
         status = "down"
     return ServiceStatus(
-        id=service_id, name=config["name"], port=config["port"],
+        id=service_id,
+        name=config["name"],
+        port=config["port"],
         external_port=config.get("external_port", config["port"]),
-        status=status, response_time_ms=round(response_time, 1) if response_time else None,
+        status=status,
+        response_time_ms=round(response_time, 1) if response_time else None,
     )
 
 
@@ -231,11 +239,16 @@ async def get_all_services() -> list[ServiceStatus]:
     for (sid, cfg), result in zip(SERVICES.items(), results):
         if isinstance(result, BaseException):
             logger.warning("Health check for %s raised %s: %s", sid, type(result).__name__, result)
-            statuses.append(ServiceStatus(
-                id=sid, name=cfg["name"], port=cfg["port"],
-                external_port=cfg.get("external_port", cfg["port"]),
-                status="down", response_time_ms=None,
-            ))
+            statuses.append(
+                ServiceStatus(
+                    id=sid,
+                    name=cfg["name"],
+                    port=cfg["port"],
+                    external_port=cfg.get("external_port", cfg["port"]),
+                    status="down",
+                    response_time_ms=None,
+                )
+            )
         else:
             statuses.append(result)
     return statuses
@@ -243,11 +256,17 @@ async def get_all_services() -> list[ServiceStatus]:
 
 # --- System Metrics ---
 
+
 def get_disk_usage() -> DiskUsage:
     """Get disk usage for the Dream Server install directory."""
     path = INSTALL_DIR if os.path.exists(INSTALL_DIR) else os.path.expanduser("~")
     total, used, free = shutil.disk_usage(path)
-    return DiskUsage(path=path, used_gb=round(used / (1024**3), 2), total_gb=round(total / (1024**3), 2), percent=round(used / total * 100, 1))
+    return DiskUsage(
+        path=path,
+        used_gb=round(used / (1024**3), 2),
+        total_gb=round(total / (1024**3), 2),
+        percent=round(used / total * 100, 1),
+    )
 
 
 def get_model_info() -> Optional[ModelInfo]:
@@ -258,18 +277,31 @@ def get_model_info() -> Optional[ModelInfo]:
             with open(env_path) as f:
                 for line in f:
                     if line.startswith("LLM_MODEL="):
-                        model_name = line.split("=", 1)[1].strip().strip('"\'')
+                        model_name = line.split("=", 1)[1].strip().strip("\"'")
                         size_gb, context, quant = 15.0, 32768, None
                         import re as _re
+
                         name_lower = model_name.lower()
-                        if _re.search(r'\b7b\b', name_lower): size_gb = 4.0
-                        elif _re.search(r'\b14b\b', name_lower): size_gb = 8.0
-                        elif _re.search(r'\b32b\b', name_lower): size_gb = 16.0
-                        elif _re.search(r'\b70b\b', name_lower): size_gb = 35.0
-                        if "awq" in name_lower: quant = "AWQ"
-                        elif "gptq" in name_lower: quant = "GPTQ"
-                        elif "gguf" in name_lower: quant = "GGUF"
-                        return ModelInfo(name=model_name, size_gb=size_gb, context_length=context, quantization=quant)
+                        if _re.search(r"\b7b\b", name_lower):
+                            size_gb = 4.0
+                        elif _re.search(r"\b14b\b", name_lower):
+                            size_gb = 8.0
+                        elif _re.search(r"\b32b\b", name_lower):
+                            size_gb = 16.0
+                        elif _re.search(r"\b70b\b", name_lower):
+                            size_gb = 35.0
+                        if "awq" in name_lower:
+                            quant = "AWQ"
+                        elif "gptq" in name_lower:
+                            quant = "GPTQ"
+                        elif "gguf" in name_lower:
+                            quant = "GGUF"
+                        return ModelInfo(
+                            name=model_name,
+                            size_gb=size_gb,
+                            context_length=context,
+                            quantization=quant,
+                        )
         except OSError as e:
             logger.warning("Failed to read .env for model info: %s", e)
     return None
@@ -295,7 +327,11 @@ def get_bootstrap_status() -> BootstrapStatus:
         eta_seconds = None
         if eta_str and eta_str.strip() and eta_str.strip() != "calculating...":
             try:
-                parts = [p.strip() for p in eta_str.replace("m", "").replace("s", "").split() if p.strip()]
+                parts = [
+                    p.strip()
+                    for p in eta_str.replace("m", "").replace("s", "").split()
+                    if p.strip()
+                ]
                 if len(parts) == 2:
                     eta_seconds = int(parts[0]) * 60 + int(parts[1])
                 elif len(parts) == 1:
@@ -316,11 +352,13 @@ def get_bootstrap_status() -> BootstrapStatus:
                 pass
 
         return BootstrapStatus(
-            active=True, model_name=data.get("model"), percent=percent,
+            active=True,
+            model_name=data.get("model"),
+            percent=percent,
             downloaded_gb=bytes_downloaded / (1024**3) if bytes_downloaded else None,
             total_gb=bytes_total / (1024**3) if bytes_total else None,
             speed_mbps=speed_bps / (1024**2) if speed_bps else None,
-            eta_seconds=eta_seconds
+            eta_seconds=eta_seconds,
         )
     except (json.JSONDecodeError, OSError, KeyError) as e:
         logger.warning("Failed to parse bootstrap status: %s", e)
@@ -336,19 +374,25 @@ def get_uptime() -> int:
                 return int(float(f.read().split()[0]))
         elif _system == "Darwin":
             import subprocess
+
             result = subprocess.run(
                 ["sysctl", "-n", "kern.boottime"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if result.returncode == 0:
                 # Output: "{ sec = 1234567890, usec = 0 } ..."
                 import re
+
                 match = re.search(r"sec\s*=\s*(\d+)", result.stdout)
                 if match:
                     import time as _time
+
                     return int(_time.time()) - int(match.group(1))
         elif _system == "Windows":
             import ctypes
+
             return ctypes.windll.kernel32.GetTickCount64() // 1000
     except Exception as e:
         logger.debug("get_uptime failed on %s: %s", _system, e)
@@ -377,6 +421,7 @@ def _get_cpu_metrics_linux() -> dict:
 
     try:
         import glob
+
         for tz in sorted(glob.glob("/sys/class/thermal/thermal_zone*/type")):
             with open(tz) as f:
                 zone_type = f.read().strip()
@@ -402,12 +447,16 @@ def _get_cpu_metrics_darwin() -> dict:
     result = {"percent": 0, "temp_c": None}
     try:
         import subprocess
+
         out = subprocess.run(
             ["top", "-l", "1", "-n", "0", "-stats", "cpu"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode == 0:
             import re
+
             match = re.search(r"CPU usage:\s+([\d.]+)%\s+user.*?([\d.]+)%\s+sys", out.stdout)
             if match:
                 result["percent"] = round(float(match.group(1)) + float(match.group(2)), 1)
@@ -453,20 +502,27 @@ def _get_ram_metrics_sysctl() -> dict:
     result = {"used_gb": 0, "total_gb": 0, "percent": 0}
     try:
         import subprocess
+
         out = subprocess.run(
             ["sysctl", "-n", "hw.memsize"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode == 0:
             total_bytes = int(out.stdout.strip())
-            total_gb = total_bytes / (1024 ** 3)
+            total_gb = total_bytes / (1024**3)
             result["total_gb"] = round(total_gb, 1)
             # vm_stat for used memory
             vm = subprocess.run(
-                ["vm_stat"], capture_output=True, text=True, timeout=5,
+                ["vm_stat"],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if vm.returncode == 0:
                 import re
+
                 pages = {}
                 for line in vm.stdout.splitlines():
                     match = re.match(r"(.+?):\s+(\d+)", line)
@@ -480,7 +536,7 @@ def _get_ram_metrics_sysctl() -> dict:
                 wired = pages.get("Pages wired down", 0)
                 compressed = pages.get("Pages occupied by compressor", 0)
                 used_bytes = (active + wired + compressed) * page_size
-                result["used_gb"] = round(used_bytes / (1024 ** 3), 1)
+                result["used_gb"] = round(used_bytes / (1024**3), 1)
                 if total_bytes > 0:
                     result["percent"] = round(used_bytes / total_bytes * 100, 1)
     except Exception as e:

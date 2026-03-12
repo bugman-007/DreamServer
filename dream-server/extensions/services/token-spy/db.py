@@ -83,18 +83,34 @@ def init_db():
 def log_usage(entry: dict):
     conn = _get_conn()
     cols = [
-        "agent", "model",
-        "request_body_bytes", "message_count", "user_message_count",
-        "assistant_message_count", "tool_count",
+        "agent",
+        "model",
+        "request_body_bytes",
+        "message_count",
+        "user_message_count",
+        "assistant_message_count",
+        "tool_count",
         "system_prompt_total_chars",
-        "workspace_agents_chars", "workspace_soul_chars", "workspace_tools_chars",
-        "workspace_identity_chars", "workspace_user_chars", "workspace_heartbeat_chars",
+        "workspace_agents_chars",
+        "workspace_soul_chars",
+        "workspace_tools_chars",
+        "workspace_identity_chars",
+        "workspace_user_chars",
+        "workspace_heartbeat_chars",
         "workspace_bootstrap_chars",
-        "skill_injection_chars", "base_prompt_chars",
+        "skill_injection_chars",
+        "base_prompt_chars",
         "conversation_history_chars",
-        "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
-        "estimated_cost_usd", "duration_ms", "stop_reason",
-        "filter_chars_saved", "filter_tokens_saved", "filter_tools_removed",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "estimated_cost_usd",
+        "duration_ms",
+        "stop_reason",
+        "filter_chars_saved",
+        "filter_tokens_saved",
+        "filter_tools_removed",
     ]
     values = [entry.get(c) for c in cols]
     placeholders = ", ".join(["?"] * len(cols))
@@ -120,7 +136,8 @@ def query_usage(agent: str | None = None, hours: int = 24, limit: int = 200) -> 
 def query_summary(hours: int = 24) -> list[dict]:
     conn = _get_conn()
     conn.row_factory = sqlite3.Row
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT
             agent,
             COUNT(*) as turns,
@@ -138,7 +155,9 @@ def query_summary(hours: int = 24) -> list[dict]:
         FROM usage
         WHERE timestamp > datetime('now', ?)
         GROUP BY agent
-    """, [f"-{hours} hours"]).fetchall()
+    """,
+        [f"-{hours} hours"],
+    ).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -153,13 +172,16 @@ def query_session_status(agent: str, char_limit: int = 200_000) -> dict:
     conn.row_factory = sqlite3.Row
 
     # Get all recent turns for this agent, ordered chronologically
-    rows = conn.execute("""
+    rows = conn.execute(
+        """
         SELECT conversation_history_chars, cache_read_tokens, cache_write_tokens,
                estimated_cost_usd, timestamp
         FROM usage
         WHERE agent = ? AND timestamp > datetime('now', '-24 hours')
         ORDER BY timestamp ASC
-    """, [agent]).fetchall()
+    """,
+        [agent],
+    ).fetchall()
 
     if not rows:
         return {
@@ -192,7 +214,9 @@ def query_session_status(agent: str, char_limit: int = 200_000) -> dict:
     # Last 5 turns for rolling averages
     last_5 = session_rows[-5:]
     avg_cost_5 = sum(r["estimated_cost_usd"] or 0 for r in last_5) / max(len(last_5), 1)
-    total_cache_5 = sum((r["cache_read_tokens"] or 0) + (r["cache_write_tokens"] or 0) for r in last_5)
+    total_cache_5 = sum(
+        (r["cache_read_tokens"] or 0) + (r["cache_write_tokens"] or 0) for r in last_5
+    )
     total_write_5 = sum(r["cache_write_tokens"] or 0 for r in last_5)
     cache_write_pct = total_write_5 / max(total_cache_5, 1)
 
@@ -239,7 +263,7 @@ def query_recent_events(limit: int = 100, after_id: str = None):
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            (after_id, limit)
+            (after_id, limit),
         ).fetchall()
     else:
         rows = conn.execute(
@@ -253,7 +277,7 @@ def query_recent_events(limit: int = 100, after_id: str = None):
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         ).fetchall()
 
     return [dict(r) for r in rows]

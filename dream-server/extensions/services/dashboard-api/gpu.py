@@ -34,6 +34,7 @@ def _read_sysfs(path: str) -> Optional[str]:
 def _find_amd_gpu_sysfs() -> Optional[str]:
     """Find the sysfs base path for an AMD GPU device."""
     import glob
+
     for card_dir in sorted(glob.glob("/sys/class/drm/card*/device")):
         vendor = _read_sysfs(f"{card_dir}/vendor")
         if vendor == "0x1002":
@@ -44,6 +45,7 @@ def _find_amd_gpu_sysfs() -> Optional[str]:
 def _find_hwmon_dir(device_path: str) -> Optional[str]:
     """Find the hwmon directory for an AMD GPU device."""
     import glob
+
     hwmon_dirs = sorted(glob.glob(f"{device_path}/hwmon/hwmon*"))
     return hwmon_dirs[0] if hwmon_dirs else None
 
@@ -119,11 +121,13 @@ def get_gpu_info_nvidia() -> Optional[GPUInfo]:
     Handles multi-GPU systems by summing VRAM across all GPUs and
     reporting aggregate utilization and peak temperature.
     """
-    success, output = run_command([
-        "nvidia-smi",
-        "--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw",
-        "--format=csv,noheader,nounits"
-    ])
+    success, output = run_command(
+        [
+            "nvidia-smi",
+            "--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw",
+            "--format=csv,noheader,nounits",
+        ]
+    )
 
     if not success or not output:
         return None
@@ -140,19 +144,27 @@ def get_gpu_info_nvidia() -> Optional[GPUInfo]:
             if len(parts) < 5:
                 continue
             power_w = None
-            if len(parts) >= 6 and parts[5] not in ("[N/A]", "[Not Supported]", "N/A", "Not Supported", ""):
+            if len(parts) >= 6 and parts[5] not in (
+                "[N/A]",
+                "[Not Supported]",
+                "N/A",
+                "Not Supported",
+                "",
+            ):
                 try:
                     power_w = round(float(parts[5]), 1)
                 except (ValueError, TypeError):
                     pass
-            gpus.append({
-                "name": parts[0],
-                "mem_used": int(parts[1]),
-                "mem_total": int(parts[2]),
-                "util": int(parts[3]),
-                "temp": int(parts[4]),
-                "power_w": power_w,
-            })
+            gpus.append(
+                {
+                    "name": parts[0],
+                    "mem_used": int(parts[1]),
+                    "mem_total": int(parts[2]),
+                    "util": int(parts[3]),
+                    "temp": int(parts[4]),
+                    "power_w": power_w,
+                }
+            )
 
         if not gpus:
             return None
@@ -229,6 +241,7 @@ def get_gpu_info_apple() -> Optional[GPUInfo]:
         success, vm_output = run_command(["vm_stat"])
         if success:
             import re
+
             pages = {}
             for line in vm_output.splitlines():
                 match = re.match(r"(.+?):\s+(\d+)", line)

@@ -29,16 +29,28 @@ from fastapi.middleware.cors import CORSMiddleware
 # --- Local modules ---
 from config import SERVICES, INSTALL_DIR, DATA_DIR, SIDEBAR_ICONS
 from models import (
-    GPUInfo, ServiceStatus, DiskUsage, ModelInfo, BootstrapStatus,
-    FullStatus, PortCheckRequest,
+    GPUInfo,
+    ServiceStatus,
+    DiskUsage,
+    ModelInfo,
+    BootstrapStatus,
+    FullStatus,
+    PortCheckRequest,
 )
 from security import verify_api_key
 from gpu import get_gpu_info
 from helpers import (
-    check_service_health, get_all_services,
-    get_disk_usage, get_model_info, get_bootstrap_status,
-    get_uptime, get_cpu_metrics, get_ram_metrics,
-    get_llama_metrics, get_loaded_model, get_llama_context_size,
+    check_service_health,
+    get_all_services,
+    get_disk_usage,
+    get_model_info,
+    get_bootstrap_status,
+    get_uptime,
+    get_cpu_metrics,
+    get_ram_metrics,
+    get_llama_metrics,
+    get_loaded_model,
+    get_llama_context_size,
 )
 from agent_monitor import collect_metrics
 
@@ -52,18 +64,21 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Dream Server Dashboard API",
     version="2.0.0",
-    description="System status API for Dream Server Dashboard"
+    description="System status API for Dream Server Dashboard",
 )
 
 # --- CORS ---
+
 
 def get_allowed_origins():
     env_origins = os.environ.get("DASHBOARD_ALLOWED_ORIGINS", "")
     if env_origins:
         return env_origins.split(",")
     origins = [
-        "http://localhost:3001", "http://127.0.0.1:3001",
-        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
     ]
     try:
         hostname = socket.gethostname()
@@ -75,6 +90,7 @@ def get_allowed_origins():
     except Exception:
         pass
     return origins
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -98,6 +114,7 @@ app.include_router(privacy.router)
 # Core Endpoints (health, status, preflight, services)
 # ================================================================
 
+
 @app.get("/health")
 async def health():
     """API health check."""
@@ -106,16 +123,22 @@ async def health():
 
 # --- Preflight ---
 
+
 @app.get("/api/preflight/docker", dependencies=[Depends(verify_api_key)])
 async def preflight_docker():
     """Check if Docker is available."""
     import subprocess
+
     if os.path.exists("/.dockerenv"):
         return {"available": True, "version": "available (host)"}
     try:
         result = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
-            version = result.stdout.strip().split()[2].rstrip(",") if len(result.stdout.strip().split()) > 2 else "unknown"
+            version = (
+                result.stdout.strip().split()[2].rstrip(",")
+                if len(result.stdout.strip().split()) > 2
+                else "unknown"
+            )
             return {"available": True, "version": version}
         return {"available": False, "error": "Docker command failed"}
     except FileNotFoundError:
@@ -133,15 +156,27 @@ async def preflight_gpu():
     gpu_info = get_gpu_info()
     if gpu_info:
         vram_gb = round(gpu_info.memory_total_mb / 1024, 1)
-        result = {"available": True, "name": gpu_info.name, "vram": vram_gb, "backend": gpu_info.gpu_backend, "memory_type": gpu_info.memory_type}
+        result = {
+            "available": True,
+            "name": gpu_info.name,
+            "vram": vram_gb,
+            "backend": gpu_info.gpu_backend,
+            "memory_type": gpu_info.memory_type,
+        }
         if gpu_info.memory_type == "unified":
             result["memory_label"] = f"{vram_gb} GB Unified"
         return result
 
     gpu_backend = os.environ.get("GPU_BACKEND", "").lower()
     if gpu_backend == "amd":
-        return {"available": False, "error": "AMD GPU not detected via sysfs. Check /dev/kfd and /dev/dri access."}
-    return {"available": False, "error": "No GPU detected. Ensure NVIDIA drivers or AMD amdgpu driver is loaded."}
+        return {
+            "available": False,
+            "error": "AMD GPU not detected via sysfs. Check /dev/kfd and /dev/dri access.",
+        }
+    return {
+        "available": False,
+        "error": "No GPU detected. Ensure NVIDIA drivers or AMD amdgpu driver is loaded.",
+    }
 
 
 @app.get("/api/preflight/required-ports", dependencies=[Depends(verify_api_key)])
@@ -172,7 +207,9 @@ async def preflight_ports(request: PortCheckRequest):
             sock.bind(("0.0.0.0", port))
             sock.close()
         except socket.error:
-            conflicts.append({"port": port, "service": port_services.get(port, "Unknown"), "in_use": True})
+            conflicts.append(
+                {"port": port, "service": port_services.get(port, "Unknown"), "in_use": True}
+            )
     return {"conflicts": conflicts, "available": len(conflicts) == 0}
 
 
@@ -182,13 +219,19 @@ async def preflight_disk():
     try:
         check_path = DATA_DIR if os.path.exists(DATA_DIR) else Path.home()
         usage = shutil.disk_usage(check_path)
-        return {"free": usage.free, "total": usage.total, "used": usage.used, "path": str(check_path)}
+        return {
+            "free": usage.free,
+            "total": usage.total,
+            "used": usage.used,
+            "path": str(check_path),
+        }
     except Exception as e:
         logger.exception("Disk preflight check failed")
         return {"error": "Disk check failed", "free": 0, "total": 0, "used": 0, "path": ""}
 
 
 # --- Core Data ---
+
 
 @app.get("/gpu", response_model=Optional[GPUInfo])
 async def gpu(api_key: str = Depends(verify_api_key)):
@@ -226,9 +269,12 @@ async def status(api_key: str = Depends(verify_api_key)):
     service_statuses = await get_all_services()
     return FullStatus(
         timestamp=datetime.now(timezone.utc).isoformat(),
-        gpu=get_gpu_info(), services=service_statuses,
-        disk=get_disk_usage(), model=get_model_info(),
-        bootstrap=get_bootstrap_status(), uptime_seconds=get_uptime()
+        gpu=get_gpu_info(),
+        services=service_statuses,
+        disk=get_disk_usage(),
+        model=get_model_info(),
+        bootstrap=get_bootstrap_status(),
+        uptime_seconds=get_uptime(),
     )
 
 
@@ -245,13 +291,21 @@ async def api_status(api_key: str = Depends(verify_api_key)):
     except Exception:
         logger.exception("/api/status handler failed — returning safe fallback")
         return {
-            "gpu": None, "services": [], "model": None,
-            "bootstrap": None, "uptime": 0,
-            "version": app.version, "tier": "Unknown",
+            "gpu": None,
+            "services": [],
+            "model": None,
+            "bootstrap": None,
+            "uptime": 0,
+            "version": app.version,
+            "tier": "Unknown",
             "cpu": {"percent": 0, "temp_c": None},
             "ram": {"used_gb": 0, "total_gb": 0, "percent": 0},
-            "inference": {"tokensPerSecond": 0, "lifetimeTokens": 0,
-                          "loadedModel": None, "contextSize": None},
+            "inference": {
+                "tokensPerSecond": 0,
+                "lifetimeTokens": 0,
+                "loadedModel": None,
+                "contextSize": None,
+            },
         }
 
 
@@ -289,20 +343,29 @@ async def _build_api_status() -> dict:
             gpu_data["powerDraw"] = gpu_info.power_w
         gpu_data["memoryLabel"] = "VRAM Partition" if gpu_info.memory_type == "unified" else "VRAM"
 
-    services_data = [{"name": s.name, "status": s.status, "port": s.external_port, "uptime": None} for s in service_statuses]
+    services_data = [
+        {"name": s.name, "status": s.status, "port": s.external_port, "uptime": None}
+        for s in service_statuses
+    ]
 
     model_data = None
     if model_info:
-        model_data = {"name": model_info.name, "tokensPerSecond": None, "contextLength": model_info.context_length}
+        model_data = {
+            "name": model_info.name,
+            "tokensPerSecond": None,
+            "contextLength": model_info.context_length,
+        }
 
     bootstrap_data = None
     if bootstrap_info.active:
         bootstrap_data = {
-            "active": True, "model": bootstrap_info.model_name or "Full Model",
+            "active": True,
+            "model": bootstrap_info.model_name or "Full Model",
             "percent": bootstrap_info.percent or 0,
             "bytesDownloaded": int((bootstrap_info.downloaded_gb or 0) * 1024**3),
             "bytesTotal": int((bootstrap_info.total_gb or 0) * 1024**3),
-            "eta": bootstrap_info.eta_seconds, "speedMbps": bootstrap_info.speed_mbps
+            "eta": bootstrap_info.eta_seconds,
+            "speedMbps": bootstrap_info.speed_mbps,
         }
 
     tier = "Unknown"
@@ -310,17 +373,27 @@ async def _build_api_status() -> dict:
         vram_gb = gpu_info.memory_total_mb / 1024
         if gpu_info.memory_type == "unified" and gpu_info.gpu_backend == "amd":
             tier = "Strix Halo 90+" if vram_gb >= 90 else "Strix Halo Compact"
-        elif vram_gb >= 80: tier = "Professional"
-        elif vram_gb >= 24: tier = "Prosumer"
-        elif vram_gb >= 16: tier = "Standard"
-        elif vram_gb >= 8: tier = "Entry"
-        else: tier = "Minimal"
+        elif vram_gb >= 80:
+            tier = "Professional"
+        elif vram_gb >= 24:
+            tier = "Prosumer"
+        elif vram_gb >= 16:
+            tier = "Standard"
+        elif vram_gb >= 8:
+            tier = "Entry"
+        else:
+            tier = "Minimal"
 
     return {
-        "gpu": gpu_data, "services": services_data, "model": model_data,
-        "bootstrap": bootstrap_data, "uptime": get_uptime(),
-        "version": app.version, "tier": tier,
-        "cpu": get_cpu_metrics(), "ram": get_ram_metrics(),
+        "gpu": gpu_data,
+        "services": services_data,
+        "model": model_data,
+        "bootstrap": bootstrap_data,
+        "uptime": get_uptime(),
+        "version": app.version,
+        "tier": tier,
+        "cpu": get_cpu_metrics(),
+        "ram": get_ram_metrics(),
         "inference": {
             "tokensPerSecond": llama_metrics_data.get("tokens_per_second", 0),
             "lifetimeTokens": llama_metrics_data.get("lifetime_tokens", 0),
@@ -331,6 +404,7 @@ async def _build_api_status() -> dict:
 
 
 # --- Settings ---
+
 
 @app.get("/api/service-tokens", dependencies=[Depends(verify_api_key)])
 async def service_tokens():
@@ -364,11 +438,15 @@ async def get_external_links(api_key: str = Depends(verify_api_key)):
         ext_port = cfg.get("external_port", cfg.get("port", 0))
         if not ext_port or sid == "dashboard-api":
             continue
-        links.append({
-            "id": sid, "label": cfg.get("name", sid), "port": ext_port,
-            "icon": SIDEBAR_ICONS.get(sid, "ExternalLink"),
-            "healthNeedles": [sid, cfg.get("name", sid).lower()],
-        })
+        links.append(
+            {
+                "id": sid,
+                "label": cfg.get("name", sid),
+                "port": ext_port,
+                "icon": SIDEBAR_ICONS.get(sid, "ExternalLink"),
+                "healthNeedles": [sid, cfg.get("name", sid).lower()],
+            }
+        )
     return links
 
 
@@ -397,14 +475,33 @@ async def api_storage(api_key: str = Depends(verify_api_key)):
     total_data_gb = dir_size_gb(data_dir)
 
     return {
-        "models": {"formatted": f"{models_gb:.1f} GB", "gb": models_gb, "percent": round(models_gb / disk_info.total_gb * 100, 1) if disk_info.total_gb else 0},
-        "vector_db": {"formatted": f"{vector_gb:.1f} GB", "gb": vector_gb, "percent": round(vector_gb / disk_info.total_gb * 100, 1) if disk_info.total_gb else 0},
-        "total_data": {"formatted": f"{total_data_gb:.1f} GB", "gb": total_data_gb, "percent": round(total_data_gb / disk_info.total_gb * 100, 1) if disk_info.total_gb else 0},
-        "disk": {"used_gb": disk_info.used_gb, "total_gb": disk_info.total_gb, "percent": disk_info.percent}
+        "models": {
+            "formatted": f"{models_gb:.1f} GB",
+            "gb": models_gb,
+            "percent": round(models_gb / disk_info.total_gb * 100, 1) if disk_info.total_gb else 0,
+        },
+        "vector_db": {
+            "formatted": f"{vector_gb:.1f} GB",
+            "gb": vector_gb,
+            "percent": round(vector_gb / disk_info.total_gb * 100, 1) if disk_info.total_gb else 0,
+        },
+        "total_data": {
+            "formatted": f"{total_data_gb:.1f} GB",
+            "gb": total_data_gb,
+            "percent": (
+                round(total_data_gb / disk_info.total_gb * 100, 1) if disk_info.total_gb else 0
+            ),
+        },
+        "disk": {
+            "used_gb": disk_info.used_gb,
+            "total_gb": disk_info.total_gb,
+            "percent": disk_info.percent,
+        },
     }
 
 
 # --- Startup ---
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -414,4 +511,5 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("DASHBOARD_API_PORT", "3002")))

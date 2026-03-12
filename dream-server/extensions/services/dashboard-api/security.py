@@ -19,7 +19,8 @@ if not DASHBOARD_API_KEY:
     key_file.chmod(0o600)
     logger.warning(
         "DASHBOARD_API_KEY not set. Generated temporary key and wrote to %s (mode 0600). "
-        "Set DASHBOARD_API_KEY in your .env file for production.", key_file
+        "Set DASHBOARD_API_KEY in your .env file for production.",
+        key_file,
     )
 
 security_scheme = HTTPBearer(auto_error=False)
@@ -31,7 +32,7 @@ async def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(se
         raise HTTPException(
             status_code=401,
             detail="Authentication required. Provide Bearer token in Authorization header.",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
     if not secrets.compare_digest(credentials.credentials, DASHBOARD_API_KEY):
         raise HTTPException(status_code=403, detail="Invalid API key.")
