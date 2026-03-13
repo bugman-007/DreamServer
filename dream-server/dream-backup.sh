@@ -8,7 +8,7 @@ set -euo pipefail
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DREAM_DIR="${DREAM_DIR:-$SCRIPT_DIR}"
-BACKUP_ROOT="${DREAM_DIR}/.backups"
+BACKUP_ROOT="${BACKUP_ROOT:-${DREAM_DIR}/.backups}"
 RETENTION_COUNT="${RETENTION_COUNT:-5}"
 
 # Colors for output
@@ -171,7 +171,7 @@ get_size_bytes() {
 # Estimate backup size before starting
 estimate_backup_size() {
     local backup_type="$1"
-    log_info "Estimating backup size..."
+    log_info "Estimating backup size..." >&2
 
     local total_size=0
     local paths_to_check=()
@@ -231,7 +231,7 @@ estimate_backup_size() {
         fi
     fi
 
-    log_info "Estimated backup size: $size_human"
+    log_info "Estimated backup size: $size_human" >&2
 
     # Check available space
     local backup_parent
@@ -330,7 +330,7 @@ backup_user_data() {
             mkdir -p "$dest_dir"
             if rsync -a --delete "$full_path" "$dest_dir/" 2>/dev/null; then
                 log_success "Backed up: $path"
-                ((success_count++))
+                ((success_count++)) || true || true
             else
                 log_error "Failed to backup: $path"
                 failed_paths+=("$path")
@@ -364,7 +364,7 @@ backup_config() {
         if [[ -f "$file" ]]; then
             if cp "$file" "$backup_dir/" 2>/dev/null; then
                 log_success "Backed up: $(basename "$file")"
-                ((success_count++))
+                ((success_count++)) || true || true
             else
                 log_error "Failed to backup: $(basename "$file")"
                 failed_files+=("$(basename "$file")")
@@ -376,7 +376,7 @@ backup_config() {
     if [[ -d "$DREAM_DIR/config" ]]; then
         if rsync -a --delete "$DREAM_DIR/config" "$backup_dir/" 2>/dev/null; then
             log_success "Backed up: config/"
-            ((success_count++))
+            ((success_count++)) || true
         else
             log_error "Failed to backup: config/"
             failed_files+=("config/")
@@ -527,7 +527,7 @@ verify_backup_integrity() {
 
     local total=0 passed=0 failed=0
     while IFS= read -r line; do
-        ((total++))
+        ((total++)) || true
         local expected_hash
         expected_hash=$(echo "$line" | awk '{print $1}')
         local filepath
@@ -547,7 +547,7 @@ verify_backup_integrity() {
             local fullpath="$backup_dir/$filepath"
             if [[ ! -f "$fullpath" ]]; then
                 log_error "Missing: $filepath"
-                ((failed++))
+                ((failed++)) || true || true
                 continue
             fi
             local actual_hash
@@ -560,10 +560,10 @@ verify_backup_integrity() {
 
         if [[ "$actual_hash" == "$expected_hash" ]]; then
             echo "  ✓ $filepath"
-            ((passed++))
+            ((passed++)) || true
         else
             log_error "Corrupted: $filepath"
-            ((failed++))
+            ((failed++)) || true
         fi
     done < "$checksums_file"
 

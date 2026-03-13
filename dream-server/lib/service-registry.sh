@@ -212,21 +212,36 @@ sr_validate_extensions_list() {
 
     sr_load
 
+    # Build O(1) membership set for available services
+    local -A _sr_available=()
+    local s
+    for s in "${SERVICE_IDS[@]}"; do
+        _sr_available["$s"]=1
+    done
+
     local missing_enabled=()
     local missing_disabled=()
 
-    while IFS=: read -r state sid; do
-        [[ -z "$sid" ]] && continue
+    while IFS= read -r line; do
+        # Trim leading/trailing whitespace
+        line="${line#${line%%[![:space:]]*}}"
+        line="${line%${line##*[![:space:]]}}"
+
         # Skip comments and empty lines
-        [[ "$state" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$line" || "$line" =~ ^# ]] && continue
 
-        # Check if service exists in current registry
-        local found=false
-        for s in "${SERVICE_IDS[@]}"; do
-            [[ "$s" == "$sid" ]] && found=true && break
-        done
+        local state sid
+        IFS=: read -r state sid <<< "$line"
 
-        if [[ "$found" == "false" ]]; then
+        # Trim whitespace around parsed tokens
+        state="${state#${state%%[![:space:]]*}}"
+        state="${state%${state##*[![:space:]]}}"
+        sid="${sid#${sid%%[![:space:]]*}}"
+        sid="${sid%${sid##*[![:space:]]}}"
+
+        [[ -z "$sid" ]] && continue
+
+        if [[ -z "${_sr_available[$sid]:-}" ]]; then
             if [[ "$state" == "enabled" ]]; then
                 missing_enabled+=("$sid")
             elif [[ "$state" == "disabled" ]]; then

@@ -251,6 +251,14 @@ validate_backup() {
             echo ""
             log_warn "⚠️  Backup may be corrupted!"
             echo ""
+
+            # Non-interactive safety: if there's no TTY, fail closed.
+            if [[ ! -t 0 ]]; then
+                log_error "Cannot prompt for confirmation in non-interactive mode. Aborting restore."
+                log_error "Re-run interactively to confirm, or ensure backup integrity before restoring."
+                return 1
+            fi
+
             read -rp "Continue with restore despite checksum failures? [y/N] " confirm
             if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
                 log_info "Restore cancelled"
@@ -278,6 +286,13 @@ validate_backup() {
             log_warn "Failed config files: $failed_files"
         fi
         echo ""
+        # Non-interactive safety: if there's no TTY, fail closed.
+        if [[ ! -t 0 ]]; then
+            log_error "Cannot prompt for confirmation in non-interactive mode. Aborting restore."
+            log_error "Re-run interactively to confirm, or create a fresh backup."
+            return 1
+        fi
+
         read -rp "Continue with restore despite these issues? [y/N] " confirm
         if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
             log_info "Restore cancelled"
