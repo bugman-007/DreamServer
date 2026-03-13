@@ -124,6 +124,9 @@ else
 fi
 
 # Port conflict detection with process details
+# Warn-once guard for missing port-check tools
+_port_check_warned=false
+
 check_port_conflict() {
     local port="$1"
     PORT_CONFLICT=false
@@ -170,8 +173,11 @@ check_port_conflict() {
         fi
     else
         # No tools available
-        warn "Neither 'lsof', 'ss', nor 'netstat' found — cannot verify port availability"
-        warn "Install lsof, iproute2 (for ss), or net-tools (for netstat) to enable port checks"
+        if [[ "${_port_check_warned}" != "true" ]]; then
+            _port_check_warned=true
+            warn "Neither 'lsof', 'ss', nor 'netstat' found — cannot verify port availability"
+            warn "Install lsof, iproute2 (for ss), or net-tools (for netstat) to enable port checks"
+        fi
         return 1
     fi
 
@@ -193,7 +199,7 @@ check_ollama_conflict() {
 check_ollama_conflict
 if $OLLAMA_RUNNING; then
     ai_warn "Ollama is running (PID ${OLLAMA_PID}) and may conflict with Dream Server."
-    ai "  Both use port 11434/8080. Ollama will shadow llama-server."
+    ai "  Note: this is usually not a port collision. Open WebUI may auto-discover Ollama (11434) and prefer it over the local llama-server (8080)."
     if $INTERACTIVE && ! $DRY_RUN; then
         read -r -p "  Stop Ollama for this session? [Y/n] " ollama_choice
         if [[ ! "$ollama_choice" =~ ^[nN] ]]; then
