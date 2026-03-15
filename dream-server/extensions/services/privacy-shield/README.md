@@ -60,6 +60,10 @@ Environment variables (set in `.env`):
 | `PII_CACHE_ENABLED` | true | Enable session PII caching |
 | `PII_CACHE_SIZE` | 1000 | Max cached sessions |
 | `PII_CACHE_TTL` | 300 | Session TTL in seconds |
+| `SHIELD_API_KEY` | (auto) | API key required by the proxy endpoints. Set explicitly in `.env` for production. |
+| `SHIELD_API_KEY_PATH` | `/data/shield_api_key` | Where an auto-generated key is persisted (mounted volume) to survive restarts. |
+
+> If `SHIELD_API_KEY` is not set, Privacy Shield will generate one and persist it to `SHIELD_API_KEY_PATH` so clients don't break after container restarts.
 
 ### API Usage
 

@@ -20,11 +20,51 @@ from cachetools import TTLCache
 from pii_scrubber import PrivacyShield
 
 # Security: API Key Authentication
+# Prefer explicit env var, but persist a generated key to the mounted /data volume
+# to avoid breaking clients across container restarts.
 SHIELD_API_KEY = os.environ.get("SHIELD_API_KEY")
+
+DEFAULT_KEY_PATH = os.environ.get("SHIELD_API_KEY_PATH", "/data/shield_api_key")
+
+
+def _load_persisted_key(path: str) -> str | None:
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            key = f.read().strip()
+        return key or None
+    except Exception:
+        logging.exception("Failed to read persisted SHIELD_API_KEY")
+        return None
+
+
+def _persist_key(path: str, key: str) -> None:
+    try:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(key)
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            # Best-effort only (may fail on some mounts/platforms)
+            pass
+    except Exception:
+        logging.exception("Failed to persist generated SHIELD_API_KEY")
+
+
 if not SHIELD_API_KEY:
-    SHIELD_API_KEY = secrets.token_urlsafe(32)
-    logging.warning("SHIELD_API_KEY not set. Generated temporary key (not logging for security). "
-                   "Set SHIELD_API_KEY in .env for production.")
+    persisted = _load_persisted_key(DEFAULT_KEY_PATH)
+    if persisted:
+        SHIELD_API_KEY = persisted
+        logging.info("Loaded persisted SHIELD_API_KEY from disk")
+    else:
+        SHIELD_API_KEY = secrets.token_urlsafe(32)
+        _persist_key(DEFAULT_KEY_PATH, SHIELD_API_KEY)
+        logging.warning(
+            "SHIELD_API_KEY not set. Generated a key and persisted it for reuse. "
+            "Set SHIELD_API_KEY in .env to manage it explicitly."
+        )
 
 security_scheme = HTTPBearer()
 
