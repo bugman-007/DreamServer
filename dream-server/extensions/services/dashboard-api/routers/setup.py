@@ -132,7 +132,7 @@ async def run_setup_diagnostics(api_key: str = Depends(verify_api_key)):
                         async with session.get(url, timeout=5) as resp:
                             status = "\u2713" if resp.status == 200 else "\u2717"
                             yield f"{status} {name}: {resp.status}\n"
-                    except Exception as e:
+                    except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as e:
                         yield f"\u2717 {name}: {e}\n"
             yield "\nSetup complete!\n"
         return StreamingResponse(error_stream(), media_type="text/plain")
