@@ -86,21 +86,141 @@ function Show-ProgressDownload {
     )
     Write-AI "$Label..."
     # Use curl.exe (ships with Windows 10+) for resume-capable download with progress
-    # Direct invocation (&) instead of Start-Process so the progress bar is visible
+    # Notes:
+    # - --fail makes HTTP 4xx/5xx return non-zero (prevents saving HTML error pages as "successful" downloads)
+    # - --retry reduces transient network failures
     $partFile = "$Destination.part"
-    & curl.exe -C - -L --progress-bar -o $partFile $Url
+    & curl.exe -C - -L --fail --retry 3 --retry-delay 2 --retry-all-errors --progress-bar -o $partFile $Url
     $curlExit = $LASTEXITCODE
     if ($curlExit -eq 0 -and (Test-Path $partFile)) {
         Move-Item -Path $partFile -Destination $Destination -Force
         Write-AISuccess "$Label complete"
         return $true
     } else {
-        $curlErrors = @{ 6="Could not resolve host"; 7="Connection refused"; 18="Partial transfer"; 28="Timeout"; 35="SSL error"; 56="Network failure" }
+        $curlErrors = @{ 6="Could not resolve host"; 7="Connection refused"; 18="Partial transfer"; 22="HTTP error"; 28="Timeout"; 35="SSL error"; 56="Network failure" }
         $hint = $(if ($curlErrors.ContainsKey($curlExit)) { " ($($curlErrors[$curlExit]))" } else { "" })
         Write-AIError "$Label failed (curl exit code: $curlExit$hint)"
         Write-AI "Re-run the installer to resume the download."
         return $false
     }
+}
+
+function Test-ZipFile {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return @{ Valid = $false; Reason = "File not found" }
+    }
+
+    try {
+        $fi = Get-Item -Path $Path
+        if ($fi.Length -lt 1024) {
+            return @{ Valid = $false; Reason = "File too small to be a valid zip" }
+        }
+
+        $fs = [System.IO.File]::OpenRead($Path)
+        try {
+            $header = New-Object byte[] 4
+            $read = $fs.Read($header, 0, 4)
+            if ($read -lt 2 -or $header[0] -ne 0x50 -or $header[1] -ne 0x4B) {
+                return @{ Valid = $false; Reason = "Missing ZIP header (PK)" }
+            }
+        } finally {
+            $fs.Close()
+        }
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue | Out-Null
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($Path)
+        try {
+            if ($zip.Entries.Count -lt 1) {
+                return @{ Valid = $false; Reason = "Zip has no entries" }
+            }
+        } finally {
+            $zip.Dispose()
+        }
+
+        return @{ Valid = $true; Reason = "OK" }
+    } catch {
+        return @{ Valid = $false; Reason = $_.Exception.Message }
+    }
+}
+
+function Expand-ZipSafe {
+    param(
+        [string]$ZipPath,
+        [string]$DestinationPath,
+        [string]$Label = "Extracting"
+    )
+
+    Write-AI "$Label..."
+    try {
+        New-Item -ItemType Directory -Path $DestinationPath -Force | Out-Null
+        Expand-Archive -Path $ZipPath -DestinationPath $DestinationPath -Force
+        return $true
+    } catch {
+        Write-AIError "$Label failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Install-ZipAsset {
+    param(
+        [string]$Url,
+        [string]$ZipPath,
+        [string]$DestinationPath,
+        [string]$Label,
+        [int]$MaxAttempts = 2
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        if (Test-Path $ZipPath) {
+            $zipOk = Test-ZipFile -Path $ZipPath
+            if (-not $zipOk.Valid) {
+                Write-AIWarn "$Label archive is invalid ($($zipOk.Reason)). Removing and re-downloading (attempt $attempt/$MaxAttempts)."
+                Remove-Item -Path $ZipPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        if (-not (Test-Path $ZipPath)) {
+            $dlOk = Show-ProgressDownload -Url $Url -Destination $ZipPath -Label "Downloading $Label"
+            if (-not $dlOk) {
+                if ($attempt -ge $MaxAttempts) { return $false }
+                continue
+            }
+        }
+
+        $zipOk2 = Test-ZipFile -Path $ZipPath
+        if (-not $zipOk2.Valid) {
+            Write-AIWarn "$Label download looks corrupt ($($zipOk2.Reason)). Removing and retrying (attempt $attempt/$MaxAttempts)."
+            Remove-Item -Path $ZipPath -Force -ErrorAction SilentlyContinue
+            if ($attempt -ge $MaxAttempts) { return $false }
+            continue
+        }
+
+        $extractOk = Expand-ZipSafe -ZipPath $ZipPath -DestinationPath $DestinationPath -Label "Extracting $Label"
+        if ($extractOk) {
+            return $true
+        }
+
+        # Extraction failed (e.g., Central Directory corrupt). Remove zip and retry.
+        Remove-Item -Path $ZipPath -Force -ErrorAction SilentlyContinue
+    }
+
+    return $false
+}
+
+function Write-DownloadTroubleshooting {
+    param(
+        [string]$Label,
+        [string]$Url,
+        [string]$ZipPath
+    )
+
+    Write-Host "";
+    Write-AIError "$Label could not be downloaded/extracted reliably."
+    Write-AI "Common causes: proxy/antivirus modifying downloads, GitHub rate limits, or a partial transfer."
+    Write-AI "You can manually download the file and place it here: $ZipPath"
+    Write-AI "URL: $Url"
 }
 
 function Write-SuccessCard {

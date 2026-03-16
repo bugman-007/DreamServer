@@ -441,18 +441,12 @@ if ($DryRun) {
             # Download llama.cpp Vulkan build
             $llamaZip = Join-Path $env:TEMP $script:LLAMA_CPP_VULKAN_ASSET
             if (-not (Test-Path $script:LLAMA_SERVER_EXE)) {
-                if (-not (Test-Path $llamaZip)) {
-                    $dlOk = Show-ProgressDownload -Url $script:LLAMA_CPP_VULKAN_URL `
-                        -Destination $llamaZip -Label "Downloading llama-server (Vulkan)"
-                    if (-not $dlOk) {
-                        Write-AIError "llama-server download failed."
-                        exit 1
-                    }
+                $ok = Install-ZipAsset -Url $script:LLAMA_CPP_VULKAN_URL -ZipPath $llamaZip `
+                    -DestinationPath $script:LLAMA_SERVER_DIR -Label "llama-server (Vulkan)" -MaxAttempts 3
+                if (-not $ok) {
+                    Write-DownloadTroubleshooting -Label "llama-server (Vulkan)" -Url $script:LLAMA_CPP_VULKAN_URL -ZipPath $llamaZip
+                    exit 1
                 }
-                # Extract
-                Write-AI "Extracting llama-server..."
-                New-Item -ItemType Directory -Path $script:LLAMA_SERVER_DIR -Force | Out-Null
-                Expand-Archive -Path $llamaZip -DestinationPath $script:LLAMA_SERVER_DIR -Force
                 # The zip may contain a subdirectory -- find llama-server.exe
                 $exeFound = Get-ChildItem -Path $script:LLAMA_SERVER_DIR -Recurse -Filter "llama-server.exe" |
                     Select-Object -First 1
@@ -657,22 +651,35 @@ if ($DryRun) {
                     }
                 }
                 if (Test-Path $ocZipPath) {
-                    New-Item -ItemType Directory -Path $script:OPENCODE_BIN -Force | Out-Null
-                    Expand-Archive -Path $ocZipPath -DestinationPath $script:OPENCODE_BIN -Force
+                    # Validate zip to avoid "Central Directory corrupt" failures.
+                    $zipOk = Test-ZipFile -Path $ocZipPath
+                    if (-not $zipOk.Valid) {
+                        Write-AIWarn "OpenCode archive is invalid ($($zipOk.Reason)). Removing and retrying download."
+                        Remove-Item -Path $ocZipPath -Force -ErrorAction SilentlyContinue
+                    }
+                }
+
+                if (-not (Test-Path $script:OPENCODE_EXE)) {
+                    $ok = Install-ZipAsset -Url $script:OPENCODE_URL -ZipPath $ocZipPath `
+                        -DestinationPath $script:OPENCODE_BIN -Label "OpenCode" -MaxAttempts 3
+                    if (-not $ok) {
+                        Write-AIWarn "OpenCode download/extract failed -- skipping (install later manually)"
+                    }
+                }
+
+                if (Test-Path $script:OPENCODE_EXE) {
+                    Write-AISuccess "Extracted opencode.exe"
+                } else {
+                    # Zip may contain a subdirectory -- find the exe
+                    $ocFound = Get-ChildItem -Path $script:OPENCODE_BIN -Recurse -Filter "opencode.exe" |
+                        Select-Object -First 1
+                    if ($ocFound -and $ocFound.DirectoryName -ne $script:OPENCODE_BIN) {
+                        Move-Item -Path $ocFound.FullName -Destination $script:OPENCODE_EXE -Force
+                    }
                     if (Test-Path $script:OPENCODE_EXE) {
                         Write-AISuccess "Extracted opencode.exe"
                     } else {
-                        # Zip may contain a subdirectory -- find the exe
-                        $ocFound = Get-ChildItem -Path $script:OPENCODE_BIN -Recurse -Filter "opencode.exe" |
-                            Select-Object -First 1
-                        if ($ocFound -and $ocFound.DirectoryName -ne $script:OPENCODE_BIN) {
-                            Move-Item -Path $ocFound.FullName -Destination $script:OPENCODE_EXE -Force
-                        }
-                        if (Test-Path $script:OPENCODE_EXE) {
-                            Write-AISuccess "Extracted opencode.exe"
-                        } else {
-                            Write-AIWarn "opencode.exe not found after extraction -- skipping"
-                        }
+                        Write-AIWarn "opencode.exe not found after extraction -- skipping"
                     }
                 }
             } else {
