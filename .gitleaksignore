@@ -3,3 +3,7 @@
 # Get fingerprints from gitleaks output when a false positive is detected
 #
 # Example: abc123def456...
+
+# Test fixtures in privacy-shield PII scrubber tests (not real secrets)
+bc47367431025198fcbea19a54abcde8c30847fd:dream-server/extensions/services/privacy-shield/tests/test_pii_scrubber.py:generic-api-key:125
+bc47367431025198fcbea19a54abcde8c30847fd:dream-server/extensions/services/privacy-shield/tests/test_pii_scrubber.py:generic-api-key:131
