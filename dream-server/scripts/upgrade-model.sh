@@ -55,7 +55,9 @@ detect_inference_service() {
         return
     fi
 
-    if docker compose "${COMPOSE_FILE_ARGS[@]}" config --services 2>/dev/null | grep -q '^llama-server$'; then
+    compose_exit=0
+    services=$(docker compose "${COMPOSE_FILE_ARGS[@]}" config --services 2>&1) || compose_exit=$?
+    if [[ $compose_exit -eq 0 ]] && echo "$services" | grep -q '^llama-server$'; then
         echo "llama-server"
     else
         echo "llama-server"
@@ -163,9 +165,13 @@ save_state() {
 
 check_llm_health() {
     resolve_inference_runtime
-    local response
+    local response curl_exit
+    curl_exit=0
     response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-        "http://${LLM_HOST:-localhost}:${INFERENCE_PORT}/health" 2>/dev/null || echo "000")
+        "http://${LLM_HOST:-localhost}:${INFERENCE_PORT}/health" 2>&1) || curl_exit=$?
+    if [[ $curl_exit -ne 0 ]]; then
+        response="000"
+    fi
     [[ "$response" == "200" ]]
 }
 
@@ -195,10 +201,11 @@ test_inference() {
     resolve_inference_runtime
     log "Testing inference..."
 
-    local response
-    response=$(curl -s --max-time 10 "http://${LLM_HOST:-localhost}:${INFERENCE_PORT}/v1/models" 2>/dev/null || echo "")
-    
-    if echo "$response" | grep -q '"data"'; then
+    local response curl_exit
+    curl_exit=0
+    response=$(curl -s --max-time 10 "http://${LLM_HOST:-localhost}:${INFERENCE_PORT}/v1/models" 2>&1) || curl_exit=$?
+
+    if [[ $curl_exit -eq 0 ]] && echo "$response" | grep -q '"data"'; then
         success "Inference test passed"
         return 0
     else
@@ -211,21 +218,27 @@ test_inference() {
 stop_llm() {
     resolve_inference_runtime
     log "Stopping ${INFERENCE_SERVICE}..."
-    
+
+    local stop_exit=0
     if command -v docker &> /dev/null; then
         if [[ ${#COMPOSE_FILE_ARGS[@]} -gt 0 ]]; then
-            docker compose "${COMPOSE_FILE_ARGS[@]}" stop "$INFERENCE_SERVICE" 2>/dev/null || true
+            docker compose "${COMPOSE_FILE_ARGS[@]}" stop "$INFERENCE_SERVICE" 2>&1 || stop_exit=$?
         else
-            docker stop "$INFERENCE_CONTAINER" 2>/dev/null || true
-            docker wait "$INFERENCE_CONTAINER" 2>/dev/null || true
+            docker stop "$INFERENCE_CONTAINER" 2>&1 || stop_exit=$?
+            if [[ $stop_exit -eq 0 ]]; then
+                docker wait "$INFERENCE_CONTAINER" 2>&1 || stop_exit=$?
+            fi
         fi
     elif command -v dream &> /dev/null; then
-        dream stop llama-server 2>/dev/null || true
+        dream stop llama-server 2>&1 || stop_exit=$?
     else
         warn "Cannot stop llama-server: no docker or dream CLI found"
         return 1
     fi
-    
+
+    if [[ $stop_exit -ne 0 ]]; then
+        warn "${INFERENCE_SERVICE} stop returned exit code $stop_exit (may already be stopped)"
+    fi
     success "${INFERENCE_SERVICE} stopped"
 }
 
@@ -271,15 +284,19 @@ start_llm() {
 cmd_list() {
     echo -e "${CYAN}Available Models:${NC}"
     echo ""
-    
+
     if [[ -d "$MODELS_DIR" ]]; then
         for model_dir in "$MODELS_DIR"/*/; do
             if [[ -f "${model_dir}config.json" ]]; then
-                local model_name size current
+                local model_name size current du_exit
                 model_name=$(basename "$model_dir")
-                size=$(du -sh "$model_dir" 2>/dev/null | cut -f1)
+                du_exit=0
+                size=$(du -sh "$model_dir" 2>&1 | cut -f1) || du_exit=$?
+                if [[ $du_exit -ne 0 ]]; then
+                    size="unknown"
+                fi
                 current=$(get_current_model)
-                
+
                 if [[ "$model_name" == "$current" ]]; then
                     echo -e "  ${GREEN}● $model_name${NC} ($size) [ACTIVE]"
                 else
@@ -290,7 +307,7 @@ cmd_list() {
     else
         echo "  No models found in $MODELS_DIR"
     fi
-    
+
     echo ""
     echo "Download more models with: model-bootstrap.sh"
 }
@@ -385,27 +402,31 @@ cmd_upgrade() {
 cmd_rollback() {
     local previous_model
     previous_model=$(get_previous_model)
-    
+
     if [[ -z "$previous_model" ]]; then
         error "No previous model to rollback to"
         return 1
     fi
-    
+
     local current_model
     current_model=$(get_current_model)
-    
+
     log "Rolling back: $current_model → $previous_model"
-    
+
     # Restore from backup state if available
     if [[ -f "$BACKUP_FILE" ]]; then
         cp "$BACKUP_FILE" "$STATE_FILE"
     fi
-    
+
     local model_path="$MODELS_DIR/$previous_model"
-    
-    stop_llm || true
+
+    local stop_exit=0
+    stop_llm || stop_exit=$?
+    if [[ $stop_exit -ne 0 ]]; then
+        warn "Stop failed during rollback (exit $stop_exit), continuing anyway"
+    fi
     start_llm "$model_path"
-    
+
     if wait_for_llm $HEALTH_CHECK_TIMEOUT && test_inference; then
         success "Rollback complete"
         save_state "$previous_model" "$current_model"
