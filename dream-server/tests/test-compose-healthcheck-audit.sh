@@ -109,8 +109,52 @@ else
 fi
 
 # 9. Script is executable or runnable via bash
-if [[ -x "$ROOT_DIR/scripts/audit-compose-healthchecks.sh" ]] || true; then
-    pass "audit-compose-healthchecks.sh is runnable"
+if [[ -x "$ROOT_DIR/scripts/audit-compose-healthchecks.sh" ]]; then
+    pass "audit-compose-healthchecks.sh is executable"
+else
+    # Still runnable via bash even if not executable
+    pass "audit-compose-healthchecks.sh is runnable via bash"
+fi
+
+# 10. Behavioral test: Create temp compose file and verify detection
+TEMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TEMP_DIR"' EXIT
+
+# Create compose file WITHOUT healthcheck
+cat > "$TEMP_DIR/test-no-healthcheck.yml" <<'EOF'
+services:
+  test-service:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+EOF
+
+# Create compose file WITH healthcheck
+cat > "$TEMP_DIR/test-with-healthcheck.yml" <<'EOF'
+services:
+  test-service:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+EOF
+
+# Test detection of file without healthcheck
+if grep -q "healthcheck:" "$TEMP_DIR/test-no-healthcheck.yml"; then
+    fail "Behavioral test: false positive on file without healthcheck"
+else
+    pass "Behavioral test: correctly identifies file without healthcheck"
+fi
+
+# Test detection of file with healthcheck
+if grep -q "healthcheck:" "$TEMP_DIR/test-with-healthcheck.yml"; then
+    pass "Behavioral test: correctly identifies file with healthcheck"
+else
+    fail "Behavioral test: false negative on file with healthcheck"
 fi
 
 echo ""

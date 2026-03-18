@@ -47,7 +47,7 @@ log() { $QUIET || echo -e "$1"; }
 compose_files=()
 while IFS= read -r -d '' file; do
     compose_files+=("$file")
-done < <(find "$ROOT_DIR" -type f \( -name "compose.yaml" -o -name "compose.*.yaml" -o -name "docker-compose*.yml" \) -print0 2>/dev/null)
+done < <(find "$ROOT_DIR" -type f \( -name "compose.yaml" -o -name "compose.*.yaml" -o -name "docker-compose*.yml" \) -print0)
 
 if [[ ${#compose_files[@]} -eq 0 ]]; then
     log "${YELLOW}No compose files found${NC}"
@@ -66,13 +66,13 @@ for file in "${compose_files[@]}"; do
     rel_path="${file#$ROOT_DIR/}"
 
     # Skip if file is a stub (services: {})
-    if grep -q "^services:\s*{}\s*$" "$file" 2>/dev/null; then
+    if grep -q "^services:[[:space:]]*{}[[:space:]]*$" "$file"; then
         missing_stub+=("$rel_path")
         continue
     fi
 
     # Check if file has healthcheck definition
-    if grep -q "healthcheck:" "$file" 2>/dev/null; then
+    if grep -q "healthcheck:" "$file"; then
         has_healthcheck+=("$rel_path")
     else
         # Categorize by file type
