@@ -47,13 +47,18 @@ fi
 pass "resolve-compose-stack.sh exists"
 
 # 3. Check if docker compose is available
-if ! command -v docker &>/dev/null; then
+if ! command -v docker >/dev/null; then
     skip "docker not available - skipping validation tests"
     echo ""; echo "Result: $PASSED passed, $FAILED failed (docker required for full tests)"
     exit 0
 fi
 
-if ! docker compose version &>/dev/null 2>&1 && ! command -v docker-compose &>/dev/null 2>&1; then
+docker_compose_exit=0
+docker compose version >/dev/null 2>&1 || docker_compose_exit=$?
+docker_compose_cmd_exit=0
+command -v docker-compose >/dev/null 2>&1 || docker_compose_cmd_exit=$?
+
+if [[ $docker_compose_exit -ne 0 ]] && [[ $docker_compose_cmd_exit -ne 0 ]]; then
     skip "docker compose not available - skipping validation tests"
     echo ""; echo "Result: $PASSED passed, $FAILED failed (docker compose required)"
     exit 0
@@ -80,10 +85,8 @@ done
 # 6. Test resolve-compose-stack.sh for each GPU backend
 cd "$ROOT_DIR"
 for backend in nvidia amd apple; do
-    set +e
-    flags=$(bash scripts/resolve-compose-stack.sh --script-dir "$ROOT_DIR" --tier 1 --gpu-backend "$backend" 2>&1)
-    resolve_exit=$?
-    set -e
+    resolve_exit=0
+    flags=$(bash scripts/resolve-compose-stack.sh --script-dir "$ROOT_DIR" --tier 1 --gpu-backend "$backend" 2>&1) || resolve_exit=$?
 
     if [[ $resolve_exit -eq 0 ]] && [[ -n "$flags" ]]; then
         pass "resolve-compose-stack.sh works for backend: $backend"
@@ -94,10 +97,8 @@ done
 
 # 7. Validate base + nvidia overlay stack
 if [[ -f "$ROOT_DIR/docker-compose.base.yml" ]] && [[ -f "$ROOT_DIR/docker-compose.nvidia.yml" ]]; then
-    set +e
-    docker compose -f docker-compose.base.yml -f docker-compose.nvidia.yml config --quiet 2>&1
-    nvidia_exit=$?
-    set -e
+    nvidia_exit=0
+    docker compose -f docker-compose.base.yml -f docker-compose.nvidia.yml config --quiet 2>&1 || nvidia_exit=$?
 
     if [[ $nvidia_exit -eq 0 ]]; then
         pass "base + nvidia overlay validates successfully"
@@ -110,10 +111,8 @@ fi
 
 # 8. Validate base + amd overlay stack
 if [[ -f "$ROOT_DIR/docker-compose.base.yml" ]] && [[ -f "$ROOT_DIR/docker-compose.amd.yml" ]]; then
-    set +e
-    docker compose -f docker-compose.base.yml -f docker-compose.amd.yml config --quiet 2>&1
-    amd_exit=$?
-    set -e
+    amd_exit=0
+    docker compose -f docker-compose.base.yml -f docker-compose.amd.yml config --quiet 2>&1 || amd_exit=$?
 
     if [[ $amd_exit -eq 0 ]]; then
         pass "base + amd overlay validates successfully"
@@ -126,10 +125,8 @@ fi
 
 # 9. Validate base + apple overlay stack
 if [[ -f "$ROOT_DIR/docker-compose.base.yml" ]] && [[ -f "$ROOT_DIR/docker-compose.apple.yml" ]]; then
-    set +e
-    docker compose -f docker-compose.base.yml -f docker-compose.apple.yml config --quiet 2>&1
-    apple_exit=$?
-    set -e
+    apple_exit=0
+    docker compose -f docker-compose.base.yml -f docker-compose.apple.yml config --quiet 2>&1 || apple_exit=$?
 
     if [[ $apple_exit -eq 0 ]]; then
         pass "base + apple overlay validates successfully"
@@ -141,10 +138,8 @@ else
 fi
 
 # 10. Test validate-compose-stack.sh with valid flags
-set +e
-bash scripts/validate-compose-stack.sh --compose-flags "-f docker-compose.base.yml" --quiet 2>&1
-validate_exit=$?
-set -e
+validate_exit=0
+bash scripts/validate-compose-stack.sh --compose-flags "-f docker-compose.base.yml" --quiet 2>&1 || validate_exit=$?
 
 if [[ $validate_exit -eq 0 ]]; then
     pass "validate-compose-stack.sh accepts valid compose flags"
@@ -153,10 +148,8 @@ else
 fi
 
 # 11. Test validate-compose-stack.sh rejects missing --compose-flags
-set +e
-bash scripts/validate-compose-stack.sh --quiet 2>&1
-missing_flags_exit=$?
-set -e
+missing_flags_exit=0
+bash scripts/validate-compose-stack.sh --quiet 2>&1 || missing_flags_exit=$?
 
 if [[ $missing_flags_exit -ne 0 ]]; then
     pass "validate-compose-stack.sh rejects missing --compose-flags"
@@ -165,7 +158,7 @@ else
 fi
 
 # 12. Count extension compose files
-ext_compose_count=$(find extensions/services -name "compose.yaml" -o -name "compose.*.yaml" 2>/dev/null | wc -l)
+ext_compose_count=$(find extensions/services -name "compose.yaml" -o -name "compose.*.yaml" | wc -l)
 if [[ $ext_compose_count -gt 0 ]]; then
     pass "found $ext_compose_count extension compose files"
 else
@@ -173,12 +166,10 @@ else
 fi
 
 # 13. Validate a sample extension compose file
-sample_ext=$(find extensions/services -name "compose.yaml" 2>/dev/null | head -1)
+sample_ext=$(find extensions/services -name "compose.yaml" | head -1)
 if [[ -n "$sample_ext" ]] && [[ -f "$sample_ext" ]]; then
-    set +e
-    docker compose -f "$sample_ext" config --quiet 2>&1
-    ext_exit=$?
-    set -e
+    ext_exit=0
+    docker compose -f "$sample_ext" config --quiet 2>&1 || ext_exit=$?
 
     if [[ $ext_exit -eq 0 ]]; then
         pass "sample extension compose file validates: $(basename "$(dirname "$sample_ext")")"

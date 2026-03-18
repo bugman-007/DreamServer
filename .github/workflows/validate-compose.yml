@@ -6,11 +6,13 @@ on:
     paths:
       - "dream-server/docker-compose*.yml"
       - "dream-server/compose/**"
+      - "dream-server/extensions/services/**/compose*.yaml"
   pull_request:
     branches: [main]
     paths:
       - "dream-server/docker-compose*.yml"
       - "dream-server/compose/**"
+      - "dream-server/extensions/services/**/compose*.yaml"
 
 permissions:
   contents: read
@@ -54,7 +56,7 @@ jobs:
       - name: Validate extension compose files
         run: |
           cd dream-server
-          ext_files=$(find extensions/services -name "compose.yaml" -type f 2>/dev/null || true)
+          ext_files=$(find extensions/services -name "compose.yaml" -type f)
 
           if [ -z "$ext_files" ]; then
             echo "No extension compose files found"
@@ -87,7 +89,7 @@ jobs:
 
       - name: Validate compose files in dream-server/compose/
         run: |
-          compose_files=$(find dream-server/compose/ -name '*.yml' -type f 2>/dev/null || true)
+          compose_files=$(find dream-server/compose/ -name '*.yml' -type f)
 
           if [ -z "$compose_files" ]; then
             echo "No compose files found in dream-server/compose/"
