@@ -51,6 +51,9 @@ jobs:
       - name: Health Check Tests
         run: bash tests/test-health-check.sh
 
+      - name: Compose Stack Validation Tests
+        run: bash tests/test-validate-compose-stack.sh
+
       - name: Validate Env Tests
         run: bash tests/test-validate-env.sh
 

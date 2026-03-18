@@ -27,6 +27,64 @@ jobs:
           echo "Validating dream-server/docker-compose.yml"
           docker compose -f dream-server/docker-compose.yml config --quiet
 
+      - name: Validate layered compose stacks (base + GPU overlays)
+        run: |
+          cd dream-server
+          echo "Validating base + nvidia overlay..."
+          docker compose -f docker-compose.base.yml -f docker-compose.nvidia.yml config --quiet
+
+          echo "Validating base + amd overlay..."
+          docker compose -f docker-compose.base.yml -f docker-compose.amd.yml config --quiet
+
+          echo "Validating base + apple overlay..."
+          docker compose -f docker-compose.base.yml -f docker-compose.apple.yml config --quiet
+
+          if [ -f docker-compose.arc.yml ]; then
+            echo "Validating base + arc overlay..."
+            docker compose -f docker-compose.base.yml -f docker-compose.arc.yml config --quiet
+          fi
+
+          if [ -f docker-compose.intel.yml ]; then
+            echo "Validating base + intel overlay..."
+            docker compose -f docker-compose.base.yml -f docker-compose.intel.yml config --quiet
+          fi
+
+          echo "All layered stacks validated successfully"
+
+      - name: Validate extension compose files
+        run: |
+          cd dream-server
+          ext_files=$(find extensions/services -name "compose.yaml" -type f 2>/dev/null || true)
+
+          if [ -z "$ext_files" ]; then
+            echo "No extension compose files found"
+            exit 0
+          fi
+
+          echo "Found extension compose files:"
+          echo "$ext_files"
+          echo ""
+
+          failed=0
+          for f in $ext_files; do
+            echo "Validating $f ..."
+            if docker compose -f "$f" config --quiet 2>&1; then
+              echo "  OK"
+            else
+              echo "  FAILED"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo ""
+            echo "One or more extension compose files failed validation."
+            exit 1
+          fi
+
+          echo ""
+          echo "All extension compose files validated successfully."
+
       - name: Validate compose files in dream-server/compose/
         run: |
           compose_files=$(find dream-server/compose/ -name '*.yml' -type f 2>/dev/null || true)
