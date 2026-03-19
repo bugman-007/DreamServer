@@ -102,7 +102,9 @@ save_state() {
 check_service_health() {
     local service="$1"
     local container
-    container=$(sr_container "$service" 2>/dev/null || echo "")
+    container_exit=0
+    container=$(sr_container "$service") || container_exit=$?
+    if [[ $container_exit -ne 0 ]]; then container=""; fi
 
     if [[ -z "$container" ]]; then
         return 1  # Service not found
@@ -115,11 +117,11 @@ check_service_health() {
 
     # Check service-specific health endpoint if available
     local health_endpoint
-    health_endpoint=$(sr_health_endpoint "$service" 2>/dev/null || echo "")
+    health_endpoint_exit=0; health_endpoint=$(sr_health_endpoint "$service") || health_endpoint_exit=$?; [[ $health_endpoint_exit -ne 0 ]] && health_endpoint=""
 
     if [[ -n "$health_endpoint" ]]; then
         local port
-        port=$(sr_port "$service" 2>/dev/null || echo "")
+        port_exit=0; port=$(sr_port "$service") || port_exit=$?; [[ $port_exit -ne 0 ]] && port=""
         if [[ -n "$port" ]]; then
             if ! curl -sf --max-time 5 "http://localhost:${port}${health_endpoint}" >/dev/null 2>&1; then
                 return 1  # Health check failed
@@ -229,7 +231,7 @@ monitor_services() {
                 unhealthy_services+=("$service")
                 log_warn "Unhealthy service detected: $service"
             fi
-        done < <(sr_list_enabled 2>/dev/null || echo "")
+        done < <(sr_list_enabled || echo "")
 
         # Restart unhealthy services
         for service in "${unhealthy_services[@]}"; do
@@ -292,7 +294,7 @@ show_status() {
         local last_restart_str="Never"
 
         if [[ $last_restart -gt 0 ]]; then
-            last_restart_str=$(date -d "@$last_restart" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r "$last_restart" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "Unknown")
+            last_restart_str_exit=0; last_restart_str=$(date -d "@$last_restart" '+%Y-%m-%d %H:%M:%S' || date -r "$last_restart" '+%Y-%m-%d %H:%M:%S') || last_restart_str_exit=$?; [[ $last_restart_str_exit -ne 0 ]] && last_restart_str="Unknown"
         fi
 
         printf "%-20s %-15s %-20s\n" "$service" "$count" "$last_restart_str"
