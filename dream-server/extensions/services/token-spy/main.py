@@ -712,7 +712,7 @@ async def _handle_non_streaming(client, raw_body, headers, model, sys_analysis,
 
     try:
         data = resp.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         data = {}
 
     resp_usage = data.get("usage", {})
@@ -942,7 +942,7 @@ async def _handle_openai_non_streaming(client, raw_body, headers, model, sys_ana
 
     try:
         data = resp.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         data = {}
 
     resp_usage = data.get("usage", {})
@@ -1015,7 +1015,7 @@ def _get_local_session_status(agent: str) -> dict:
     try:
         with open(largest) as f:
             lines = f.readlines()
-    except Exception:
+    except (FileNotFoundError, IOError, PermissionError):
         log.warning(f"[SESSION] Failed to read session file: {largest}")
         return None
 
@@ -1113,7 +1113,7 @@ def _get_local_accumulated_turns(agent: str) -> int:
                                 assistant_turns += 1
                     except (json.JSONDecodeError, KeyError, TypeError):
                         pass  # skip malformed JSONL lines
-        except Exception:
+        except (FileNotFoundError, IOError, PermissionError):
             log.warning(f"[SESSION] Failed to read session file: {fpath}")
     current_file_turns = user_turns if user_turns > 0 else assistant_turns
 
@@ -1140,7 +1140,7 @@ def _get_local_accumulated_turns(agent: str) -> int:
         os.makedirs(os.path.dirname(acc_path), exist_ok=True)
         with open(acc_path, "w") as f:
             json.dump(acc, f)
-    except Exception:
+    except (IOError, PermissionError, OSError):
         log.warning(f"[SESSION] Failed to save accumulated turns for {agent}")
 
     return total
