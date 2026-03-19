@@ -211,21 +211,30 @@ test_inference() {
 stop_llm() {
     resolve_inference_runtime
     log "Stopping ${INFERENCE_SERVICE}..."
-    
+
     if command -v docker &> /dev/null; then
         if [[ ${#COMPOSE_FILE_ARGS[@]} -gt 0 ]]; then
-            docker compose "${COMPOSE_FILE_ARGS[@]}" stop "$INFERENCE_SERVICE" 2>/dev/null || true
+            stop_exit=0
+            docker compose "${COMPOSE_FILE_ARGS[@]}" stop "$INFERENCE_SERVICE" 2>/dev/null || stop_exit=$?
+            [[ $stop_exit -ne 0 ]] && log "docker compose stop failed (exit $stop_exit)"
         else
-            docker stop "$INFERENCE_CONTAINER" 2>/dev/null || true
-            docker wait "$INFERENCE_CONTAINER" 2>/dev/null || true
+            stop_exit=0
+            docker stop "$INFERENCE_CONTAINER" 2>/dev/null || stop_exit=$?
+            [[ $stop_exit -ne 0 ]] && log "docker stop failed (exit $stop_exit)"
+
+            wait_exit=0
+            docker wait "$INFERENCE_CONTAINER" 2>/dev/null || wait_exit=$?
+            [[ $wait_exit -ne 0 ]] && log "docker wait failed (exit $wait_exit)"
         fi
     elif command -v dream &> /dev/null; then
-        dream stop llama-server 2>/dev/null || true
+        dream_exit=0
+        dream stop llama-server 2>/dev/null || dream_exit=$?
+        [[ $dream_exit -ne 0 ]] && log "dream stop failed (exit $dream_exit)"
     else
         warn "Cannot stop llama-server: no docker or dream CLI found"
         return 1
     fi
-    
+
     success "${INFERENCE_SERVICE} stopped"
 }
 
@@ -400,10 +409,13 @@ cmd_rollback() {
     if [[ -f "$BACKUP_FILE" ]]; then
         cp "$BACKUP_FILE" "$STATE_FILE"
     fi
-    
+
     local model_path="$MODELS_DIR/$previous_model"
-    
-    stop_llm || true
+
+    stop_exit=0
+    stop_llm || stop_exit=$?
+    [[ $stop_exit -ne 0 ]] && log "stop_llm failed during rollback (exit $stop_exit)"
+
     start_llm "$model_path"
     
     if wait_for_llm $HEALTH_CHECK_TIMEOUT && test_inference; then
