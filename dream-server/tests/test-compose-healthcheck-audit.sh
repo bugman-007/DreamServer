@@ -117,6 +117,39 @@ else
 fi
 
 # 10. Behavioral test: Create temp compose file and verify detection
+temp_dir=$(mktemp -d)
+trap 'rm -rf "$temp_dir"' EXIT
+
+# Create compose file WITH healthcheck
+cat > "$temp_dir/compose-with-health.yaml" << 'EOF'
+services:
+  test-service:
+    image: nginx
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+EOF
+
+# Create compose file WITHOUT healthcheck
+cat > "$temp_dir/compose-no-health.yaml" << 'EOF'
+services:
+  test-service:
+    image: nginx
+EOF
+
+# Run audit on temp directory
+cd "$temp_dir"
+audit_output=$(bash "$ROOT_DIR/scripts/audit-compose-healthchecks.sh" 2>&1)
+
+# Verify detection
+if echo "$audit_output" | grep -q "compose-with-health.yaml" && \
+   echo "$audit_output" | grep -q "compose-no-health.yaml"; then
+    pass "Behavioral test: audit correctly detects healthcheck presence/absence"
+else
+    fail "Behavioral test: audit failed to detect healthcheck status"
+fi
+
+cd "$ROOT_DIR"
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
