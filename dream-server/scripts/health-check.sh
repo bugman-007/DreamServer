@@ -289,7 +289,9 @@ done
 
 # Wait for all core service checks to complete
 for pid in "${CORE_PIDS[@]}"; do
-    wait "$pid" 2>/dev/null || true
+    wait_exit=0
+    wait "$pid" 2>/dev/null || wait_exit=$?
+    [[ $wait_exit -ne 0 ]] && log "Health check process $pid exited with code $wait_exit"
 done
 
 # Display core service results
@@ -343,7 +345,9 @@ done
 
 # Wait for all extension service checks to complete
 for pid in "${EXT_PIDS[@]}"; do
-    wait "$pid" 2>/dev/null || true
+    wait_exit=0
+    wait "$pid" 2>/dev/null || wait_exit=$?
+    [[ $wait_exit -ne 0 ]] && log "Health check process $pid exited with code $wait_exit"
 done
 
 # Display extension service results
