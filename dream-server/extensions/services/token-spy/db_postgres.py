@@ -133,7 +133,7 @@ def _get_or_create_agent(agent_name: str) -> UUID:
             conn.commit()
             _agent_cache[agent_name] = agent_id
             return agent_id
-    except Exception:
+    except (psycopg2.DatabaseError, psycopg2.OperationalError) as e:
         conn.rollback()
         raise
     finally:
@@ -206,7 +206,7 @@ def log_usage(entry: dict):
                 )
             )
             conn.commit()
-    except Exception:
+    except (psycopg2.DatabaseError, psycopg2.OperationalError) as e:
         conn.rollback()
         raise
     finally:
